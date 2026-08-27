@@ -1,0 +1,32 @@
+services:
+  backend:
+    build: ./backend
+    container_name: equipment-tracker-backend
+    restart: unless-stopped
+    environment:
+      - PORT=4000
+      - JWT_SECRET=${JWT_SECRET:-change-this-secret-in-production}
+    volumes:
+      - equipment_data:/app/data
+    ports:
+      - "4000:4000"  
+    networks:
+      - equipment-net
+
+  frontend:
+    build: ./frontend
+    container_name: equipment-tracker-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - equipment-net
+
+volumes:
+  equipment_data:
+
+networks:
+  equipment-net:
+    driver: bridge
