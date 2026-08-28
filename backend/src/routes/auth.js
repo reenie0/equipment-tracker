@@ -1,3 +1,4 @@
+
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -13,6 +14,17 @@ const router = express.Router();
 
 /*
 ====================================================
+VALIDATION LIMITS
+====================================================
+*/
+
+const MIN_PASSWORD_LENGTH = 6;
+const MAX_PASSWORD_LENGTH = 72;
+const MAX_NAME_LENGTH = 100;
+const MAX_USERNAME_LENGTH = 30;
+
+/*
+====================================================
 CREATE JWT
 ====================================================
 */
@@ -24,7 +36,9 @@ function signToken(user) {
       name: user.name,
       username: user.username,
       role: user.role,
-      must_change_password: Boolean(user.must_change_password)
+      must_change_password: Boolean(
+        user.must_change_password
+      )
     },
     JWT_SECRET,
     {
@@ -46,7 +60,9 @@ function formatUser(user) {
     username: user.username,
     role: user.role,
     active: Boolean(user.active),
-    must_change_password: Boolean(user.must_change_password)
+    must_change_password: Boolean(
+      user.must_change_password
+    )
   };
 }
 
@@ -73,17 +89,100 @@ router.post("/register", (req, res) => {
     password
   } = req.body || {};
 
+  /*
+  --------------------------------------------------
+  REQUIRED FIELDS
+  --------------------------------------------------
+  */
+
   if (!name || !username || !password) {
     return res.status(400).json({
-      error: "Name, username, and password are required"
+      error:
+        "Name, username, and password are required"
     });
   }
 
-  if (password.length < 6) {
+  /*
+  --------------------------------------------------
+  TRIM NAME AND USERNAME
+  --------------------------------------------------
+  */
+
+  const cleanName = name.trim();
+  const cleanUsername = username.trim();
+
+  if (!cleanName) {
     return res.status(400).json({
-      error: "Password must be at least 6 characters"
+      error: "Name cannot be empty"
     });
   }
+
+  if (!cleanUsername) {
+    return res.status(400).json({
+      error: "Username cannot be empty"
+    });
+  }
+
+  /*
+  --------------------------------------------------
+  NAME LENGTH
+  --------------------------------------------------
+  */
+
+  if (cleanName.length > MAX_NAME_LENGTH) {
+    return res.status(400).json({
+      error:
+        `Name must not exceed ${MAX_NAME_LENGTH} characters`
+    });
+  }
+
+  /*
+  --------------------------------------------------
+  USERNAME LENGTH
+  --------------------------------------------------
+  */
+
+  if (
+    cleanUsername.length >
+    MAX_USERNAME_LENGTH
+  ) {
+    return res.status(400).json({
+      error:
+        `Username must not exceed ${MAX_USERNAME_LENGTH} characters`
+    });
+  }
+
+  /*
+  --------------------------------------------------
+  PASSWORD LENGTH
+  --------------------------------------------------
+  */
+
+  if (
+    password.length <
+    MIN_PASSWORD_LENGTH
+  ) {
+    return res.status(400).json({
+      error:
+        `Password must be at least ${MIN_PASSWORD_LENGTH} characters`
+    });
+  }
+
+  if (
+    password.length >
+    MAX_PASSWORD_LENGTH
+  ) {
+    return res.status(400).json({
+      error:
+        `Password must not exceed ${MAX_PASSWORD_LENGTH} characters`
+    });
+  }
+
+  /*
+  --------------------------------------------------
+  CHECK USERNAME
+  --------------------------------------------------
+  */
 
   const existing = db
     .prepare(`
@@ -91,15 +190,29 @@ router.post("/register", (req, res) => {
       FROM users
       WHERE username = ?
     `)
-    .get(username);
+    .get(cleanUsername);
 
   if (existing) {
     return res.status(409).json({
-      error: "That username is already taken"
+      error:
+        "That username is already taken"
     });
   }
 
-  const hash = bcrypt.hashSync(password, 10);
+  /*
+  --------------------------------------------------
+  HASH PASSWORD
+  --------------------------------------------------
+  */
+
+  const hash =
+    bcrypt.hashSync(password, 10);
+
+  /*
+  --------------------------------------------------
+  CREATE STAFF USER
+  --------------------------------------------------
+  */
 
   const info = db
     .prepare(`
@@ -114,10 +227,16 @@ router.post("/register", (req, res) => {
       VALUES (?, ?, ?, 'staff', 1, 0)
     `)
     .run(
-      name,
-      username,
+      cleanName,
+      cleanUsername,
       hash
     );
+
+  /*
+  --------------------------------------------------
+  GET CREATED USER
+  --------------------------------------------------
+  */
 
   const user = db
     .prepare(`
@@ -127,7 +246,19 @@ router.post("/register", (req, res) => {
     `)
     .get(info.lastInsertRowid);
 
+  /*
+  --------------------------------------------------
+  CREATE TOKEN
+  --------------------------------------------------
+  */
+
   const token = signToken(user);
+
+  /*
+  --------------------------------------------------
+  RESPONSE
+  --------------------------------------------------
+  */
 
   res.status(201).json({
     token,
@@ -147,11 +278,53 @@ router.post("/login", (req, res) => {
     password
   } = req.body || {};
 
+  /*
+  --------------------------------------------------
+  REQUIRED FIELDS
+  --------------------------------------------------
+  */
+
   if (!username || !password) {
     return res.status(400).json({
-      error: "Username and password are required"
+      error:
+        "Username and password are required"
     });
   }
+
+  /*
+  --------------------------------------------------
+  USERNAME LENGTH
+  --------------------------------------------------
+  */
+
+  if (
+    username.trim().length >
+    MAX_USERNAME_LENGTH
+  ) {
+    return res.status(400).json({
+      error:
+        `Username must not exceed ${MAX_USERNAME_LENGTH} characters`
+    });
+  }
+
+  /*
+  --------------------------------------------------
+  PASSWORD LENGTH
+  --------------------------------------------------
+  */
+
+  if (
+    password.length >
+    MAX_PASSWORD_LENGTH
+  ) {
+    return res.status(400).json({
+      error:
+        `Password must not exceed ${MAX_PASSWORD_LENGTH} characters`
+    });
+  }
+
+  const cleanUsername =
+    username.trim();
 
   /*
   --------------------------------------------------
@@ -165,7 +338,7 @@ router.post("/login", (req, res) => {
       FROM users
       WHERE username = ?
     `)
-    .get(username);
+    .get(cleanUsername);
 
   /*
   --------------------------------------------------
@@ -181,7 +354,8 @@ router.post("/login", (req, res) => {
     )
   ) {
     return res.status(401).json({
-      error: "Incorrect username or password"
+      error:
+        "Incorrect username or password"
     });
   }
 
@@ -210,18 +384,13 @@ router.post("/login", (req, res) => {
   --------------------------------------------------
   LOGIN RESPONSE
   --------------------------------------------------
-
-  The frontend can use must_change_password
-  to redirect the user to the password-change page.
-  --------------------------------------------------
   */
 
   res.json({
     token,
     user: formatUser(user),
-    must_change_password: Boolean(
-      user.must_change_password
-    )
+    must_change_password:
+      Boolean(user.must_change_password)
   });
 });
 
@@ -265,7 +434,8 @@ router.get(
 
     if (!user.active) {
       return res.status(403).json({
-        error: "Account is inactive"
+        error:
+          "Account is inactive"
       });
     }
 
@@ -299,25 +469,56 @@ router.post(
 
     /*
     ------------------------------------------------
-    VALIDATION
+    REQUIRED FIELDS
     ------------------------------------------------
     */
 
-    if (!current_password || !new_password) {
+    if (
+      !current_password ||
+      !new_password
+    ) {
       return res.status(400).json({
         error:
           "Current password and new password are required"
       });
     }
 
-    if (new_password.length < 6) {
+    /*
+    ------------------------------------------------
+    NEW PASSWORD LENGTH
+    ------------------------------------------------
+    */
+
+    if (
+      new_password.length <
+      MIN_PASSWORD_LENGTH
+    ) {
       return res.status(400).json({
         error:
-          "New password must be at least 6 characters"
+          `New password must be at least ${MIN_PASSWORD_LENGTH} characters`
       });
     }
 
-    if (current_password === new_password) {
+    if (
+      new_password.length >
+      MAX_PASSWORD_LENGTH
+    ) {
+      return res.status(400).json({
+        error:
+          `New password must not exceed ${MAX_PASSWORD_LENGTH} characters`
+      });
+    }
+
+    /*
+    ------------------------------------------------
+    CURRENT / NEW PASSWORD
+    ------------------------------------------------
+    */
+
+    if (
+      current_password ===
+      new_password
+    ) {
       return res.status(400).json({
         error:
           "New password must be different from your current password"
@@ -352,7 +553,8 @@ router.post(
 
     if (!user.active) {
       return res.status(403).json({
-        error: "Your account is inactive"
+        error:
+          "Your account is inactive"
       });
     }
 
@@ -370,7 +572,8 @@ router.post(
 
     if (!passwordCorrect) {
       return res.status(401).json({
-        error: "Current password is incorrect"
+        error:
+          "Current password is incorrect"
       });
     }
 
@@ -426,7 +629,7 @@ router.post(
     ISSUE NEW TOKEN
     ------------------------------------------------
 
-    Important: the old JWT may contain
+    The old JWT may contain
     must_change_password = true.
 
     We issue a fresh token containing false.
@@ -436,16 +639,25 @@ router.post(
     const newToken =
       signToken(updatedUser);
 
+    /*
+    ------------------------------------------------
+    RESPONSE
+    ------------------------------------------------
+    */
+
     res.json({
       success: true,
+
       message:
         "Password changed successfully",
 
       token: newToken,
 
-      user: formatUser(updatedUser),
+      user:
+        formatUser(updatedUser),
 
-      must_change_password: false
+      must_change_password:
+        false
     });
   }
 );
@@ -453,6 +665,7 @@ router.post(
 /*
 ====================================================
 LOGOUT
+====================================================
 
 JWT authentication is stateless, so logout is
 handled by the frontend by removing the token.
@@ -466,3 +679,4 @@ EXPORT
 */
 
 module.exports = router;
+
