@@ -12,12 +12,31 @@ export default function Users() {
   const [showAdd, setShowAdd] = useState(false);
 
   const [newUser, setNewUser] = useState({
-  name: "",
-  username: "",
-  role: "staff"
-});
+    name: "",
+    username: "",
+    role: "staff",
+    department: ""
+  });
 
-const [createdUser, setCreatedUser] = useState(null);
+  const [createdUser, setCreatedUser] = useState(null);
+
+  /*
+  ==================================================
+  DEPARTMENTS
+  ==================================================
+  */
+
+  const departments = [
+    "Post Production",
+    "Production",
+    "Transmission",
+    "IT",
+    "Newsroom Creatives",
+    "Admin",
+    "Social Media",
+    "Security",
+    "Programming"
+  ];
 
   /*
   ==================================================
@@ -70,40 +89,51 @@ const [createdUser, setCreatedUser] = useState(null);
   */
 
   const handleAddUser = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  try {
-    const result = await api.createUser(
-      token,
-      newUser
-    );
+    if (!newUser.department) {
+      setToast({
+        type: "error",
+        text: "Please select a department."
+      });
 
-    setUsers((prev) => [
-      result.user,
-      ...prev
-    ]);
+      return;
+    }
 
-    setCreatedUser({
-      name: result.user.name,
-      username: result.user.username,
-      password: result.temporary_password
-    });
+    try {
+      const result = await api.createUser(
+        token,
+        newUser
+      );
 
-    setNewUser({
-      name: "",
-      username: "",
-      role: "staff"
-    });
+      setUsers((prev) => [
+        result.user,
+        ...prev
+      ]);
 
-    setShowAdd(false);
+      setCreatedUser({
+        name: result.user.name,
+        username: result.user.username,
+        department: result.user.department,
+        password: result.temporary_password
+      });
 
-  } catch (err) {
-    setToast({
-      type: "error",
-      text: err.message
-    });
-  }
-};
+      setNewUser({
+        name: "",
+        username: "",
+        role: "staff",
+        department: ""
+      });
+
+      setShowAdd(false);
+
+    } catch (err) {
+      setToast({
+        type: "error",
+        text: err.message
+      });
+    }
+  };
 
   /*
   ==================================================
@@ -214,6 +244,7 @@ const [createdUser, setCreatedUser] = useState(null);
       <div className="container">
 
         <div className="page-header">
+
           <div>
             <p className="eyebrow">
               Administration
@@ -224,19 +255,18 @@ const [createdUser, setCreatedUser] = useState(null);
             </h1>
 
             <p className="page-sub">
-              Create users, manage roles, and
-              control account access.
+              Create users, assign departments,
+              manage roles, and control account access.
             </p>
           </div>
 
           <button
             className="btn btn-primary"
-            onClick={() =>
-              setShowAdd(true)
-            }
+            onClick={() => setShowAdd(true)}
           >
             + Add user
           </button>
+
         </div>
 
         {loading ? (
@@ -256,6 +286,7 @@ const [createdUser, setCreatedUser] = useState(null);
                 <tr>
                   <th>Name</th>
                   <th>Username</th>
+                  <th>Department</th>
                   <th>Role</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -280,6 +311,10 @@ const [createdUser, setCreatedUser] = useState(null);
 
                       <td>
                         {item.username}
+                      </td>
+
+                      <td>
+                        {item.department || "Not assigned"}
                       </td>
 
                       <td>
@@ -335,9 +370,7 @@ const [createdUser, setCreatedUser] = useState(null);
                           onClick={() =>
                             handleStatusChange(
                               item.id,
-                              !Boolean(
-                                item.active
-                              )
+                              !Boolean(item.active)
                             )
                           }
                         >
@@ -362,19 +395,19 @@ const [createdUser, setCreatedUser] = useState(null);
 
       </div>
 
+      {/* ==================================================
+          ADD USER MODAL
+          ================================================== */}
+
       {showAdd && (
         <div
           className="modal-backdrop"
-          onClick={() =>
-            setShowAdd(false)
-          }
+          onClick={() => setShowAdd(false)}
         >
 
           <div
             className="modal"
-            onClick={(e) =>
-              e.stopPropagation()
-            }
+            onClick={(e) => e.stopPropagation()}
           >
 
             <div className="modal-header">
@@ -385,20 +418,19 @@ const [createdUser, setCreatedUser] = useState(null);
 
               <button
                 className="close-x"
-                onClick={() =>
-                  setShowAdd(false)
-                }
+                onClick={() => setShowAdd(false)}
               >
                 ×
               </button>
 
             </div>
 
-            <form
-              onSubmit={handleAddUser}
-            >
+            <form onSubmit={handleAddUser}>
+
+              {/* NAME */}
 
               <label className="field">
+
                 <span>
                   Full name
                 </span>
@@ -414,9 +446,13 @@ const [createdUser, setCreatedUser] = useState(null);
                   }
                   required
                 />
+
               </label>
 
+              {/* USERNAME */}
+
               <label className="field">
+
                 <span>
                   Username
                 </span>
@@ -427,17 +463,54 @@ const [createdUser, setCreatedUser] = useState(null);
                   onChange={(e) =>
                     setNewUser({
                       ...newUser,
-                      username:
-                        e.target.value
+                      username: e.target.value
                     })
                   }
                   required
                 />
+
               </label>
 
-              
+              {/* DEPARTMENT */}
 
               <label className="field">
+
+                <span>
+                  Department
+                </span>
+
+                <select
+                  value={newUser.department}
+                  onChange={(e) =>
+                    setNewUser({
+                      ...newUser,
+                      department: e.target.value
+                    })
+                  }
+                  required
+                >
+
+                  <option value="">
+                    Select department
+                  </option>
+
+                  {departments.map((department) => (
+                    <option
+                      key={department}
+                      value={department}
+                    >
+                      {department}
+                    </option>
+                  ))}
+
+                </select>
+
+              </label>
+
+              {/* ROLE */}
+
+              <label className="field">
+
                 <span>
                   Role
                 </span>
@@ -465,13 +538,15 @@ const [createdUser, setCreatedUser] = useState(null);
                   </option>
 
                 </select>
+
               </label>
+
+              {/* BUTTONS */}
 
               <div
                 style={{
                   display: "flex",
-                  justifyContent:
-                    "flex-end",
+                  justifyContent: "flex-end",
                   gap: 10,
                   marginTop: 20
                 }}
@@ -480,9 +555,7 @@ const [createdUser, setCreatedUser] = useState(null);
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() =>
-                    setShowAdd(false)
-                  }
+                  onClick={() => setShowAdd(false)}
                 >
                   Cancel
                 </button>
@@ -503,100 +576,119 @@ const [createdUser, setCreatedUser] = useState(null);
         </div>
       )}
 
+      {/* ==================================================
+          CREATED USER
+          ================================================== */}
+
       {createdUser && (
-  <div
-    className="modal-backdrop"
-    onClick={() => setCreatedUser(null)}
-  >
-    <div
-      className="modal"
-      onClick={(e) => e.stopPropagation()}
-    >
-
-      <div className="modal-header">
-        <h3>
-          User Created Successfully
-        </h3>
-
-        <button
-          className="close-x"
+        <div
+          className="modal-backdrop"
           onClick={() => setCreatedUser(null)}
         >
-          ×
-        </button>
-      </div>
-
-      <div style={{ marginBottom: 20 }}>
-
-        <p>
-          The account has been created successfully.
-        </p>
-
-        <p>
-          Give the following login details to the user:
-        </p>
-
-        <div style={{ marginTop: 20 }}>
-
-          <p>
-            <strong>Name:</strong>{" "}
-            {createdUser.name}
-          </p>
-
-          <p>
-            <strong>Username:</strong>{" "}
-            {createdUser.username}
-          </p>
-
-          <p>
-            <strong>Initial Password:</strong>
-          </p>
 
           <div
-            style={{
-              padding: "12px 16px",
-              background: "#f3f4f6",
-              borderRadius: 8,
-              fontFamily: "monospace",
-              fontSize: 18,
-              fontWeight: "bold",
-              letterSpacing: 1
-            }}
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
           >
-            {createdUser.password}
+
+            <div className="modal-header">
+
+              <h3>
+                User Created Successfully
+              </h3>
+
+              <button
+                className="close-x"
+                onClick={() => setCreatedUser(null)}
+              >
+                ×
+              </button>
+
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+
+              <p>
+                The account has been created successfully.
+              </p>
+
+              <p>
+                Give the following login details to the user:
+              </p>
+
+              <div style={{ marginTop: 20 }}>
+
+                <p>
+                  <strong>Name:</strong>{" "}
+                  {createdUser.name}
+                </p>
+
+                <p>
+                  <strong>Username:</strong>{" "}
+                  {createdUser.username}
+                </p>
+
+                <p>
+                  <strong>Department:</strong>{" "}
+                  {createdUser.department}
+                </p>
+
+                <p>
+                  <strong>Initial Password:</strong>
+                </p>
+
+                <div
+                  style={{
+                    padding: "12px 16px",
+                    background: "#f3f4f6",
+                    borderRadius: 8,
+                    fontFamily: "monospace",
+                    fontSize: 18,
+                    fontWeight: "bold",
+                    letterSpacing: 1
+                  }}
+                >
+                  {createdUser.password}
+                </div>
+
+                <p
+                  style={{
+                    marginTop: 15,
+                    fontSize: 14
+                  }}
+                >
+                  The user will be required to change
+                  this password when they first log in.
+                </p>
+
+              </div>
+
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end"
+              }}
+            >
+
+              <button
+                className="btn btn-primary"
+                onClick={() => setCreatedUser(null)}
+              >
+                Done
+              </button>
+
+            </div>
+
           </div>
 
-          <p
-            style={{
-              marginTop: 15,
-              fontSize: 14
-            }}
-          >
-            The user will be required to change this
-            password when they first log in.
-          </p>
-
         </div>
+      )}
 
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "flex-end"
-        }}
-      >
-        <button
-          className="btn btn-primary"
-          onClick={() => setCreatedUser(null)}
-        >
-          Done
-        </button>
-      </div>
-
-    </div>
-  </div>
-)}
+      {/* ==================================================
+          TOAST
+          ================================================== */}
 
       {toast && (
         <div
