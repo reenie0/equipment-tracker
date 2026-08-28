@@ -23,11 +23,42 @@ router.use(requireSuperUser);
 
 /*
 ====================================================
+ALLOWED DEPARTMENTS
+====================================================
+*/
+
+const ALLOWED_DEPARTMENTS = [
+  "post production",
+  "production",
+  "transmission",
+  "IT",
+  "newsroom creatives",
+  "admin",
+  "social media",
+  "security",
+  "programming"
+];
+
+/*
+====================================================
+ALLOWED ROLES
+====================================================
+*/
+
+const ALLOWED_ROLES = [
+  "staff",
+  "manager",
+  "superuser"
+];
+
+/*
+====================================================
 GET ALL USERS
 ====================================================
 */
 
 router.get("/", (req, res) => {
+
   const users = db
     .prepare(`
       SELECT
@@ -35,7 +66,9 @@ router.get("/", (req, res) => {
         name,
         username,
         role,
+        department,
         active,
+        must_change_password,
         created_at
       FROM users
       ORDER BY created_at DESC
@@ -54,6 +87,7 @@ GET ONE USER
 */
 
 router.get("/:id", (req, res) => {
+
   const user = db
     .prepare(`
       SELECT
@@ -61,7 +95,9 @@ router.get("/:id", (req, res) => {
         name,
         username,
         role,
+        department,
         active,
+        must_change_password,
         created_at
       FROM users
       WHERE id = ?
@@ -86,59 +122,72 @@ CREATE USER
 
 Only Super Users can create accounts.
 
-Every newly created account receives the
-temporary password:
+Every newly created account receives:
 
 diamond01
 
-The user must change this password when
-they first log in.
+The user must change this password
+when they first log in.
 ====================================================
 */
 
 router.post("/", (req, res) => {
+
   const {
     name,
     username,
-    role
+    role,
+    department
   } = req.body || {};
 
   /*
-  ====================================================
+  ==================================================
   VALIDATION
-  ====================================================
+  ==================================================
   */
 
-  if (!name || !username) {
+  if (!name || !username || !department) {
     return res.status(400).json({
-      error: "Name and username are required"
+      error:
+        "Name, username, and department are required"
+    });
+  }
+
+  const trimmedName = name.trim();
+  const trimmedUsername = username.trim();
+
+  /*
+  ==================================================
+  CHECK DEPARTMENT
+  ==================================================
+  */
+
+  if (!ALLOWED_DEPARTMENTS.includes(department)) {
+    return res.status(400).json({
+      error:
+        "Invalid department"
     });
   }
 
   /*
-  ====================================================
-  ALLOWED ROLES
-  ====================================================
+  ==================================================
+  CHECK ROLE
+  ==================================================
   */
-
-  const allowedRoles = [
-    "staff",
-    "manager",
-    "superuser"
-  ];
 
   const selectedRole = role || "staff";
 
-  if (!allowedRoles.includes(selectedRole)) {
+  if (!ALLOWED_ROLES.includes(selectedRole)) {
     return res.status(400).json({
-      error: "Role must be staff, manager, or superuser"
+      error:
+        "Role must be staff, manager, or superuser"
     });
   }
 
   /*
-  ====================================================
+  ==================================================
   CHECK USERNAME
-  ====================================================
+  ==================================================
   */
 
   const existing = db
@@ -147,37 +196,33 @@ router.post("/", (req, res) => {
       FROM users
       WHERE username = ?
     `)
-    .get(username.trim());
+    .get(trimmedUsername);
 
   if (existing) {
     return res.status(409).json({
-      error: "That username is already taken"
+      error:
+        "That username is already taken"
     });
   }
 
   /*
-  ====================================================
+  ==================================================
   DEFAULT PASSWORD
-  ====================================================
-
-  Every account created by the Super User
-  starts with this temporary password.
-
-  The user MUST change it after first login.
-  ====================================================
+  ==================================================
   */
 
   const DEFAULT_PASSWORD = "diamond01";
 
-  const passwordHash = bcrypt.hashSync(
-    DEFAULT_PASSWORD,
-    10
-  );
+  const passwordHash =
+    bcrypt.hashSync(
+      DEFAULT_PASSWORD,
+      10
+    );
 
   /*
-  ====================================================
+  ==================================================
   CREATE USER
-  ====================================================
+  ==================================================
   */
 
   const info = db
@@ -187,22 +232,24 @@ router.post("/", (req, res) => {
         username,
         password_hash,
         role,
+        department,
         active,
         must_change_password
       )
-      VALUES (?, ?, ?, ?, 1, 1)
+      VALUES (?, ?, ?, ?, ?, 1, 1)
     `)
     .run(
-      name.trim(),
-      username.trim(),
+      trimmedName,
+      trimmedUsername,
       passwordHash,
-      selectedRole
+      selectedRole,
+      department
     );
 
   /*
-  ====================================================
+  ==================================================
   GET CREATED USER
-  ====================================================
+  ==================================================
   */
 
   const user = db
@@ -212,6 +259,7 @@ router.post("/", (req, res) => {
         name,
         username,
         role,
+        department,
         active,
         must_change_password,
         created_at
@@ -221,14 +269,17 @@ router.post("/", (req, res) => {
     .get(info.lastInsertRowid);
 
   /*
-  ====================================================
+  ==================================================
   RESPONSE
-  ====================================================
+  ==================================================
   */
 
   res.status(201).json({
     user,
-    temporary_password: DEFAULT_PASSWORD,
+
+    temporary_password:
+      DEFAULT_PASSWORD,
+
     message:
       "User created successfully. The user must change the temporary password when they first log in."
   });
@@ -241,9 +292,11 @@ UPDATE USER DETAILS
 */
 
 router.patch("/:id", (req, res) => {
+
   const {
     name,
-    username
+    username,
+    department
   } = req.body || {};
 
   const user = db
@@ -260,14 +313,49 @@ router.patch("/:id", (req, res) => {
     });
   }
 
-  if (!name && !username) {
+  if (
+    !name &&
+    !username &&
+    !department
+  ) {
     return res.status(400).json({
       error:
-        "Name or username is required"
+        "Name, username, or department is required"
     });
   }
 
-  if (username && username !== user.username) {
+  /*
+  ==================================================
+  VALIDATE DEPARTMENT
+  ==================================================
+  */
+
+  if (
+    department &&
+    !ALLOWED_DEPARTMENTS.includes(department)
+  ) {
+    return res.status(400).json({
+      error:
+        "Invalid department"
+    });
+  }
+
+  /*
+  ==================================================
+  CHECK USERNAME
+  ==================================================
+  */
+
+  const newUsername =
+    username
+      ? username.trim()
+      : user.username;
+
+  if (
+    username &&
+    newUsername !== user.username
+  ) {
+
     const existing = db
       .prepare(`
         SELECT id
@@ -276,7 +364,7 @@ router.patch("/:id", (req, res) => {
         AND id != ?
       `)
       .get(
-        username,
+        newUsername,
         user.id
       );
 
@@ -288,17 +376,37 @@ router.patch("/:id", (req, res) => {
     }
   }
 
+  /*
+  ==================================================
+  UPDATE
+  ==================================================
+  */
+
   db.prepare(`
     UPDATE users
     SET
       name = ?,
-      username = ?
+      username = ?,
+      department = ?
     WHERE id = ?
   `).run(
-    name || user.name,
-    username || user.username,
+    name
+      ? name.trim()
+      : user.name,
+
+    newUsername,
+
+    department ||
+      user.department,
+
     user.id
   );
+
+  /*
+  ==================================================
+  GET UPDATED USER
+  ==================================================
+  */
 
   const updatedUser = db
     .prepare(`
@@ -307,7 +415,9 @@ router.patch("/:id", (req, res) => {
         name,
         username,
         role,
+        department,
         active,
+        must_change_password,
         created_at
       FROM users
       WHERE id = ?
@@ -326,17 +436,12 @@ CHANGE USER ROLE
 */
 
 router.patch("/:id/role", (req, res) => {
+
   const {
     role
   } = req.body || {};
 
-  const allowedRoles = [
-    "staff",
-    "manager",
-    "superuser"
-  ];
-
-  if (!allowedRoles.includes(role)) {
+  if (!ALLOWED_ROLES.includes(role)) {
     return res.status(400).json({
       error:
         "Role must be staff, manager, or superuser"
@@ -358,8 +463,8 @@ router.patch("/:id/role", (req, res) => {
   }
 
   /*
-  Prevent the Super User from accidentally
-  removing their own Super User permissions.
+  Prevent Super User from removing
+  their own Super User permissions.
   */
 
   if (
@@ -388,7 +493,9 @@ router.patch("/:id/role", (req, res) => {
         name,
         username,
         role,
+        department,
         active,
+        must_change_password,
         created_at
       FROM users
       WHERE id = ?
@@ -407,6 +514,7 @@ ACTIVATE / DEACTIVATE USER
 */
 
 router.patch("/:id/status", (req, res) => {
+
   const {
     active
   } = req.body || {};
@@ -438,8 +546,8 @@ router.patch("/:id/status", (req, res) => {
   }
 
   /*
-  Prevent a Super User from deactivating
-  their own account.
+  Prevent Super User from
+  deactivating their own account.
   */
 
   if (
@@ -453,7 +561,9 @@ router.patch("/:id/status", (req, res) => {
   }
 
   const activeValue =
-    Boolean(active) ? 1 : 0;
+    Boolean(active)
+      ? 1
+      : 0;
 
   db.prepare(`
     UPDATE users
@@ -471,7 +581,9 @@ router.patch("/:id/status", (req, res) => {
         name,
         username,
         role,
+        department,
         active,
+        must_change_password,
         created_at
       FROM users
       WHERE id = ?
@@ -490,6 +602,7 @@ RESET USER PASSWORD
 */
 
 router.patch("/:id/password", (req, res) => {
+
   const {
     password
   } = req.body || {};
@@ -523,11 +636,16 @@ router.patch("/:id/password", (req, res) => {
   }
 
   const passwordHash =
-    bcrypt.hashSync(password, 10);
+    bcrypt.hashSync(
+      password,
+      10
+    );
 
   db.prepare(`
     UPDATE users
-    SET password_hash = ?
+    SET
+      password_hash = ?,
+      must_change_password = 1
     WHERE id = ?
   `).run(
     passwordHash,
@@ -537,7 +655,7 @@ router.patch("/:id/password", (req, res) => {
   res.json({
     success: true,
     message:
-      "Password updated successfully"
+      "Password reset successfully. The user must change the password when they next log in."
   });
 });
 
