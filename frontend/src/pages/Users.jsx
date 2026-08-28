@@ -12,11 +12,12 @@ export default function Users() {
   const [showAdd, setShowAdd] = useState(false);
 
   const [newUser, setNewUser] = useState({
-    name: "",
-    username: "",
-    password: "",
-    role: "staff"
-  });
+  name: "",
+  username: "",
+  role: "staff"
+});
+
+const [createdUser, setCreatedUser] = useState(null);
 
   /*
   ==================================================
@@ -69,40 +70,40 @@ export default function Users() {
   */
 
   const handleAddUser = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    try {
-      const result = await api.createUser(
-        token,
-        newUser
-      );
+  try {
+    const result = await api.createUser(
+      token,
+      newUser
+    );
 
-      setUsers((prev) => [
-        result.user,
-        ...prev
-      ]);
+    setUsers((prev) => [
+      result.user,
+      ...prev
+    ]);
 
-      setNewUser({
-        name: "",
-        username: "",
-        password: "",
-        role: "staff"
-      });
+    setCreatedUser({
+      name: result.user.name,
+      username: result.user.username,
+      password: result.temporary_password
+    });
 
-      setShowAdd(false);
+    setNewUser({
+      name: "",
+      username: "",
+      role: "staff"
+    });
 
-      setToast({
-        type: "ok",
-        text: "User created successfully."
-      });
+    setShowAdd(false);
 
-    } catch (err) {
-      setToast({
-        type: "error",
-        text: err.message
-      });
-    }
-  };
+  } catch (err) {
+    setToast({
+      type: "error",
+      text: err.message
+    });
+  }
+};
 
   /*
   ==================================================
@@ -434,25 +435,7 @@ export default function Users() {
                 />
               </label>
 
-              <label className="field">
-                <span>
-                  Password
-                </span>
-
-                <input
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) =>
-                    setNewUser({
-                      ...newUser,
-                      password:
-                        e.target.value
-                    })
-                  }
-                  minLength={6}
-                  required
-                />
-              </label>
+              
 
               <label className="field">
                 <span>
@@ -519,6 +502,101 @@ export default function Users() {
 
         </div>
       )}
+
+      {createdUser && (
+  <div
+    className="modal-backdrop"
+    onClick={() => setCreatedUser(null)}
+  >
+    <div
+      className="modal"
+      onClick={(e) => e.stopPropagation()}
+    >
+
+      <div className="modal-header">
+        <h3>
+          User Created Successfully
+        </h3>
+
+        <button
+          className="close-x"
+          onClick={() => setCreatedUser(null)}
+        >
+          ×
+        </button>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+
+        <p>
+          The account has been created successfully.
+        </p>
+
+        <p>
+          Give the following login details to the user:
+        </p>
+
+        <div style={{ marginTop: 20 }}>
+
+          <p>
+            <strong>Name:</strong>{" "}
+            {createdUser.name}
+          </p>
+
+          <p>
+            <strong>Username:</strong>{" "}
+            {createdUser.username}
+          </p>
+
+          <p>
+            <strong>Initial Password:</strong>
+          </p>
+
+          <div
+            style={{
+              padding: "12px 16px",
+              background: "#f3f4f6",
+              borderRadius: 8,
+              fontFamily: "monospace",
+              fontSize: 18,
+              fontWeight: "bold",
+              letterSpacing: 1
+            }}
+          >
+            {createdUser.password}
+          </div>
+
+          <p
+            style={{
+              marginTop: 15,
+              fontSize: 14
+            }}
+          >
+            The user will be required to change this
+            password when they first log in.
+          </p>
+
+        </div>
+
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end"
+        }}
+      >
+        <button
+          className="btn btn-primary"
+          onClick={() => setCreatedUser(null)}
+        >
+          Done
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
 
       {toast && (
         <div
