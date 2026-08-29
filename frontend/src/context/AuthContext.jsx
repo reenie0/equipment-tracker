@@ -1,3 +1,4 @@
+
 import {
   createContext,
   useContext,
@@ -80,13 +81,15 @@ export function AuthProvider({ children }) {
   const register = async (
     name,
     username,
-    password
+    password,
+    department
   ) => {
 
     const data = await api.register(
       name,
       username,
-      password
+      password,
+      department
     );
 
     setToken(data.token);
