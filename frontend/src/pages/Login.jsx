@@ -1,16 +1,45 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+/*
+====================================================
+USER DEPARTMENTS
+====================================================
+These are the ONLY departments available when
+creating a normal user account.
+====================================================
+*/
+
+const USER_DEPARTMENTS = [
+  "Newsroom",
+  "Post Production",
+  "Production",
+  "Transmission",
+  "Marketing",
+  "Social Media",
+  "IT",
+  "Musanza",
+  "Security",
+  "Administration",
+  "Programming",
+  "Finance"
+];
+
 export default function Login() {
-  const { login, register, changePassword } = useAuth();
+  const {
+    login,
+    register,
+    changePassword
+  } = useAuth();
+
   const navigate = useNavigate();
 
   const [mode, setMode] = useState("login");
 
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
+  const [department, setDepartment] = useState("");
   const [password, setPassword] = useState("");
 
   const [newPassword, setNewPassword] = useState("");
@@ -18,14 +47,24 @@ export default function Login() {
 
   /*
   ==================================================
-  SHOW / HIDE PASSWORD STATES
+  SHOW / HIDE PASSWORD
   ==================================================
   */
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  const [showNewPassword, setShowNewPassword] =
+    useState(false);
+
   const [showConfirmPassword, setShowConfirmPassword] =
     useState(false);
+
+  /*
+  ==================================================
+  FORM STATE
+  ==================================================
+  */
 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -85,8 +124,9 @@ export default function Login() {
     );
 
     /*
-    If the account was created by a Super User,
-    the backend will return must_change_password = true.
+    --------------------------------------------------
+    TEMPORARY PASSWORD
+    --------------------------------------------------
     */
 
     if (result?.must_change_password) {
@@ -100,7 +140,9 @@ export default function Login() {
     }
 
     /*
-    Normal login
+    --------------------------------------------------
+    NORMAL LOGIN
+    --------------------------------------------------
     */
 
     navigate("/");
@@ -146,6 +188,32 @@ export default function Login() {
       return;
     }
 
+    /*
+    --------------------------------------------------
+    DEPARTMENT
+    --------------------------------------------------
+    */
+
+    if (!department) {
+      setError("Please select your department.");
+      return;
+    }
+
+    if (
+      !USER_DEPARTMENTS.includes(department)
+    ) {
+      setError(
+        "Please select a valid department."
+      );
+      return;
+    }
+
+    /*
+    --------------------------------------------------
+    PASSWORD
+    --------------------------------------------------
+    */
+
     if (!password) {
       setError("Please enter a password.");
       return;
@@ -171,10 +239,17 @@ export default function Login() {
       return;
     }
 
+    /*
+    --------------------------------------------------
+    REGISTER USER
+    --------------------------------------------------
+    */
+
     await register(
       trimmedName,
       trimmedUsername,
-      password
+      password,
+      department
     );
 
     navigate("/");
@@ -190,7 +265,10 @@ export default function Login() {
     setError("");
     setMessage("");
 
-    if (!newPassword || !confirmPassword) {
+    if (
+      !newPassword ||
+      !confirmPassword
+    ) {
       setError(
         "Please enter and confirm your new password."
       );
@@ -217,12 +295,19 @@ export default function Login() {
       return;
     }
 
-    if (newPassword !== confirmPassword) {
-      setError("The new passwords do not match.");
+    if (
+      newPassword !==
+      confirmPassword
+    ) {
+      setError(
+        "The new passwords do not match."
+      );
       return;
     }
 
-    if (newPassword === password) {
+    if (
+      newPassword === password
+    ) {
       setError(
         "Your new password must be different from your temporary password."
       );
@@ -239,7 +324,7 @@ export default function Login() {
 
   /*
   ==================================================
-  MAIN SUBMIT
+  MAIN FORM SUBMIT
   ==================================================
   */
 
@@ -264,8 +349,8 @@ export default function Login() {
       }
     } catch (err) {
       setError(
-        err.message ||
-        "Something went wrong. Please try again."
+        err?.message ||
+          "Something went wrong. Please try again."
       );
     } finally {
       setSubmitting(false);
@@ -274,7 +359,7 @@ export default function Login() {
 
   /*
   ==================================================
-  PASSWORD INPUT STYLE
+  PASSWORD INPUT STYLES
   ==================================================
   */
 
@@ -307,7 +392,9 @@ export default function Login() {
   ==================================================
   */
 
-  if (mode === "change-password") {
+  if (
+    mode === "change-password"
+  ) {
     return (
       <div className="auth-wrap">
         <div className="auth-card">
@@ -332,9 +419,9 @@ export default function Login() {
               color: "var(--muted)"
             }}
           >
-            Your account was created with a temporary
-            password. Please create a new password
-            before continuing.
+            Your account was created with a
+            temporary password. Please create a
+            new password before continuing.
           </p>
 
           <form onSubmit={submit}>
@@ -361,9 +448,15 @@ export default function Login() {
             </div>
 
             <div className="form-field">
-              <label>New password</label>
+              <label>
+                New password
+              </label>
 
-              <div style={passwordInputWrapper}>
+              <div
+                style={
+                  passwordInputWrapper
+                }
+              >
                 <input
                   type={
                     showNewPassword
@@ -372,15 +465,23 @@ export default function Login() {
                   }
                   value={newPassword}
                   onChange={(e) =>
-                    setNewPassword(e.target.value)
+                    setNewPassword(
+                      e.target.value
+                    )
                   }
                   placeholder="Enter your new password"
-                  minLength={MIN_PASSWORD_LENGTH}
-                  maxLength={MAX_PASSWORD_LENGTH}
+                  minLength={
+                    MIN_PASSWORD_LENGTH
+                  }
+                  maxLength={
+                    MAX_PASSWORD_LENGTH
+                  }
                   required
                   autoFocus
                   autoComplete="new-password"
-                  style={passwordInputStyle}
+                  style={
+                    passwordInputStyle
+                  }
                 />
 
                 <button
@@ -390,7 +491,9 @@ export default function Login() {
                       !showNewPassword
                     )
                   }
-                  style={eyeButtonStyle}
+                  style={
+                    eyeButtonStyle
+                  }
                   aria-label={
                     showNewPassword
                       ? "Hide password"
@@ -402,33 +505,49 @@ export default function Login() {
                       : "Show password"
                   }
                 >
-                  {showNewPassword ? "🙈" : "👁️"}
+                  {showNewPassword
+                    ? "🙈"
+                    : "👁️"}
                 </button>
               </div>
             </div>
 
             <div className="form-field">
-              <label>Confirm new password</label>
+              <label>
+                Confirm new password
+              </label>
 
-              <div style={passwordInputWrapper}>
+              <div
+                style={
+                  passwordInputWrapper
+                }
+              >
                 <input
                   type={
                     showConfirmPassword
                       ? "text"
                       : "password"
                   }
-                  value={confirmPassword}
+                  value={
+                    confirmPassword
+                  }
                   onChange={(e) =>
                     setConfirmPassword(
                       e.target.value
                     )
                   }
                   placeholder="Confirm your new password"
-                  minLength={MIN_PASSWORD_LENGTH}
-                  maxLength={MAX_PASSWORD_LENGTH}
+                  minLength={
+                    MIN_PASSWORD_LENGTH
+                  }
+                  maxLength={
+                    MAX_PASSWORD_LENGTH
+                  }
                   required
                   autoComplete="new-password"
-                  style={passwordInputStyle}
+                  style={
+                    passwordInputStyle
+                  }
                 />
 
                 <button
@@ -438,7 +557,9 @@ export default function Login() {
                       !showConfirmPassword
                     )
                   }
-                  style={eyeButtonStyle}
+                  style={
+                    eyeButtonStyle
+                  }
                   aria-label={
                     showConfirmPassword
                       ? "Hide password"
@@ -460,7 +581,9 @@ export default function Login() {
             <button
               type="submit"
               className="btn btn-primary"
-              style={{ width: "100%" }}
+              style={{
+                width: "100%"
+              }}
               disabled={submitting}
             >
               {submitting
@@ -523,40 +646,101 @@ export default function Login() {
 
           {mode === "register" && (
             <div className="form-field">
-              <label>Full name</label>
+
+              <label>
+                Full name
+              </label>
 
               <input
                 type="text"
                 value={name}
                 onChange={(e) =>
-                  setName(e.target.value)
+                  setName(
+                    e.target.value
+                  )
                 }
-                maxLength={MAX_NAME_LENGTH}
+                maxLength={
+                  MAX_NAME_LENGTH
+                }
                 required
                 autoComplete="name"
               />
+
+            </div>
+          )}
+
+          {mode === "register" && (
+            <div className="form-field">
+
+              <label>
+                Department
+              </label>
+
+              <select
+                value={department}
+                onChange={(e) =>
+                  setDepartment(
+                    e.target.value
+                  )
+                }
+                required
+              >
+
+                <option value="">
+                  Select your department
+                </option>
+
+                {USER_DEPARTMENTS.map(
+                  (dept) => (
+                    <option
+                      key={dept}
+                      value={dept}
+                    >
+                      {dept}
+                    </option>
+                  )
+                )}
+
+              </select>
+
             </div>
           )}
 
           <div className="form-field">
-            <label>Username</label>
+
+            <label>
+              Username
+            </label>
 
             <input
               type="text"
               value={username}
               onChange={(e) =>
-                setUsername(e.target.value)
+                setUsername(
+                  e.target.value
+                )
               }
-              maxLength={MAX_USERNAME_LENGTH}
+              maxLength={
+                MAX_USERNAME_LENGTH
+              }
               required
               autoComplete="username"
             />
+
           </div>
 
           <div className="form-field">
-            <label>Password</label>
 
-            <div style={passwordInputWrapper}>
+            <label>
+              Password
+            </label>
+
+            <div
+              style={
+                passwordInputWrapper
+              }
+            >
+
               <input
                 type={
                   showPassword
@@ -565,17 +749,25 @@ export default function Login() {
                 }
                 value={password}
                 onChange={(e) =>
-                  setPassword(e.target.value)
+                  setPassword(
+                    e.target.value
+                  )
                 }
-                minLength={MIN_PASSWORD_LENGTH}
-                maxLength={MAX_PASSWORD_LENGTH}
+                minLength={
+                  MIN_PASSWORD_LENGTH
+                }
+                maxLength={
+                  MAX_PASSWORD_LENGTH
+                }
                 required
                 autoComplete={
                   mode === "login"
                     ? "current-password"
                     : "new-password"
                 }
-                style={passwordInputStyle}
+                style={
+                  passwordInputStyle
+                }
               />
 
               <button
@@ -585,7 +777,9 @@ export default function Login() {
                     !showPassword
                   )
                 }
-                style={eyeButtonStyle}
+                style={
+                  eyeButtonStyle
+                }
                 aria-label={
                   showPassword
                     ? "Hide password"
@@ -601,6 +795,7 @@ export default function Login() {
                   ? "🙈"
                   : "👁️"}
               </button>
+
             </div>
           </div>
 
@@ -622,7 +817,9 @@ export default function Login() {
           <button
             type="submit"
             className="btn btn-primary"
-            style={{ width: "100%" }}
+            style={{
+              width: "100%"
+            }}
             disabled={submitting}
           >
             {submitting
@@ -646,6 +843,7 @@ export default function Login() {
                 onClick={() => {
                   setError("");
                   setMessage("");
+                  setDepartment("");
                   setMode("register");
                 }}
               >
@@ -662,6 +860,7 @@ export default function Login() {
                 onClick={() => {
                   setError("");
                   setMessage("");
+                  setDepartment("");
                   setMode("login");
                 }}
               >
