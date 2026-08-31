@@ -6,7 +6,9 @@ const fs = require("fs");
 const DATA_DIR = path.join(__dirname, "..", "data");
 
 if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(DATA_DIR, {
+    recursive: true
+  });
 }
 
 const db = new Database(
@@ -23,17 +25,39 @@ DEPARTMENT DEFINITIONS
 ====================================================
 */
 
+/*
+----------------------------------------------------
+USER DEPARTMENTS
+----------------------------------------------------
+
+These are the ONLY departments users can have.
+----------------------------------------------------
+*/
+
 const USER_DEPARTMENTS = [
+  "Newsroom",
   "Post Production",
   "Production",
   "Transmission",
-  "IT",
-  "Newsroom Creatives",
-  "Admin",
+  "Marketing",
   "Social Media",
+  "IT",
+  "Musanza",
   "Security",
-  "Programming"
+  "Administration",
+  "Programming",
+  "Finance"
 ];
+
+
+/*
+----------------------------------------------------
+EQUIPMENT DEPARTMENTS
+----------------------------------------------------
+
+Equipment intentionally uses a separate list.
+----------------------------------------------------
+*/
 
 const EQUIPMENT_DEPARTMENTS = [
   "Post Production",
@@ -44,21 +68,111 @@ const EQUIPMENT_DEPARTMENTS = [
 
 /*
 ====================================================
-CREATE USERS TABLE
+HELPERS
 ====================================================
 */
 
-const usersTable = db
-  .prepare(`
-    SELECT name, sql
-    FROM sqlite_master
-    WHERE type = 'table'
-      AND name = 'users'
-  `)
-  .get();
+function tableExists(tableName) {
+  const result = db
+    .prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND name = ?
+    `)
+    .get(tableName);
+
+  return !!result;
+}
 
 
-if (!usersTable) {
+function getTableSql(tableName) {
+  const result = db
+    .prepare(`
+      SELECT sql
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND name = ?
+    `)
+    .get(tableName);
+
+  return result?.sql || "";
+}
+
+
+function getColumns(tableName) {
+  if (!tableExists(tableName)) {
+    return [];
+  }
+
+  return db
+    .prepare(
+      `PRAGMA table_info(${tableName})`
+    )
+    .all();
+}
+
+
+function hasColumn(tableName, columnName) {
+  return getColumns(tableName).some(
+    column => column.name === columnName
+  );
+}
+
+
+/*
+====================================================
+CLEAN UP FAILED TEMPORARY TABLES
+====================================================
+*/
+
+if (
+  tableExists("users_new") &&
+  tableExists("users")
+) {
+  console.log(
+    "⚠️ Removing incomplete users_new migration table..."
+  );
+
+  db.pragma("foreign_keys = OFF");
+
+  db.exec(`
+    DROP TABLE IF EXISTS users_new;
+  `);
+
+  db.pragma("foreign_keys = ON");
+}
+
+
+if (
+  tableExists("bookings_new") &&
+  tableExists("bookings")
+) {
+  console.log(
+    "⚠️ Removing incomplete bookings_new migration table..."
+  );
+
+  db.pragma("foreign_keys = OFF");
+
+  db.exec(`
+    DROP TABLE IF EXISTS bookings_new;
+  `);
+
+  db.pragma("foreign_keys = ON");
+}
+
+
+/*
+====================================================
+USERS TABLE
+====================================================
+*/
+
+if (!tableExists("users")) {
+
+  console.log(
+    "🔄 Creating users table..."
+  );
 
   db.exec(`
     CREATE TABLE users (
@@ -72,6 +186,7 @@ if (!usersTable) {
       password_hash TEXT NOT NULL,
 
       role TEXT NOT NULL
+
         CHECK (
           role IN (
             'staff',
@@ -79,36 +194,47 @@ if (!usersTable) {
             'superuser'
           )
         )
+
         DEFAULT 'staff',
 
       department TEXT NOT NULL
+
         CHECK (
           department IN (
+            'Newsroom',
             'Post Production',
             'Production',
             'Transmission',
-            'IT',
-            'Newsroom Creatives',
-            'Admin',
+            'Marketing',
             'Social Media',
+            'IT',
+            'Musanza',
             'Security',
-            'Programming'
+            'Administration',
+            'Programming',
+            'Finance'
           )
         )
+
         DEFAULT 'Post Production',
 
       active INTEGER NOT NULL
+
         DEFAULT 1,
 
       must_change_password INTEGER NOT NULL
+
         DEFAULT 0,
 
       created_at TEXT NOT NULL
+
         DEFAULT (datetime('now'))
     );
   `);
 
-  console.log("✅ Users table created.");
+  console.log(
+    "✅ Users table created."
+  );
 
 }
 
@@ -121,43 +247,124 @@ MIGRATE EXISTING USERS TABLE
 
 else {
 
-  const columns = db
-    .prepare("PRAGMA table_info(users)")
-    .all();
+  const usersSql =
+    getTableSql("users");
 
-  const hasActiveColumn = columns.some(
-    column => column.name === "active"
-  );
+  const usersColumns =
+    getColumns("users");
 
-  const hasMustChangePasswordColumn = columns.some(
-    column => column.name === "must_change_password"
-  );
+  const hasRoleColumn =
+    usersColumns.some(
+      column => column.name === "role"
+    );
 
-  const hasDepartmentColumn = columns.some(
-    column => column.name === "department"
-  );
+  const hasDepartment =
+    usersColumns.some(
+      column => column.name === "department"
+    );
 
-  const usersTableSql = usersTable.sql || "";
+  const hasActive =
+    usersColumns.some(
+      column => column.name === "active"
+    );
 
-  const hasOldRoleConstraint =
-    usersTableSql.includes("'user'") &&
-    usersTableSql.includes("'manager'") &&
-    usersTableSql.includes("CHECK");
-
+  const hasMustChangePassword =
+    usersColumns.some(
+      column =>
+        column.name ===
+        "must_change_password"
+    );
 
   /*
   --------------------------------------------------
-  MIGRATE OLD ROLE STRUCTURE
+  CHECK WHETHER THE CURRENT TABLE ALREADY USES
+  THE NEW DEPARTMENT LIST
   --------------------------------------------------
   */
 
-  if (hasOldRoleConstraint) {
+  const needsDepartmentMigration =
+    !usersSql.includes("'Newsroom'") ||
+    !usersSql.includes("'Marketing'") ||
+    !usersSql.includes("'Musanza'") ||
+    !usersSql.includes("'Administration'") ||
+    !usersSql.includes("'Finance'");
+
+
+  /*
+  ==================================================
+  ADD MISSING SIMPLE COLUMNS FIRST
+  ==================================================
+  */
+
+  if (!hasActive) {
 
     console.log(
-      "🔄 Migrating users table..."
+      "🔄 Adding users.active..."
     );
 
-    db.pragma("foreign_keys = OFF");
+    db.exec(`
+      ALTER TABLE users
+      ADD COLUMN active INTEGER
+      NOT NULL
+      DEFAULT 1
+    `);
+
+    console.log(
+      "✅ users.active added."
+    );
+  }
+
+
+  if (!hasMustChangePassword) {
+
+    console.log(
+      "🔄 Adding users.must_change_password..."
+    );
+
+    db.exec(`
+      ALTER TABLE users
+      ADD COLUMN must_change_password INTEGER
+      NOT NULL
+      DEFAULT 0
+    `);
+
+    console.log(
+      "✅ users.must_change_password added."
+    );
+  }
+
+
+  /*
+  ==================================================
+  REBUILD USERS TABLE IF THE DEPARTMENT CHECK
+  IS OLD OR MISSING
+  ==================================================
+  */
+
+  if (
+    needsDepartmentMigration ||
+    !hasDepartment
+  ) {
+
+    console.log(
+      "🔄 Migrating users table to the new 12-department structure..."
+    );
+
+    /*
+    ------------------------------------------------
+    FOREIGN KEYS OFF
+    ------------------------------------------------
+    */
+
+    db.pragma(
+      "foreign_keys = OFF"
+    );
+
+    /*
+    ------------------------------------------------
+    CREATE NEW USERS TABLE
+    ------------------------------------------------
+    */
 
     db.exec(`
       CREATE TABLE users_new (
@@ -171,6 +378,7 @@ else {
         password_hash TEXT NOT NULL,
 
         role TEXT NOT NULL
+
           CHECK (
             role IN (
               'staff',
@@ -178,198 +386,361 @@ else {
               'superuser'
             )
           )
+
           DEFAULT 'staff',
 
         department TEXT NOT NULL
+
+          CHECK (
+            department IN (
+              'Newsroom',
+              'Post Production',
+              'Production',
+              'Transmission',
+              'Marketing',
+              'Social Media',
+              'IT',
+              'Musanza',
+              'Security',
+              'Administration',
+              'Programming',
+              'Finance'
+            )
+          )
+
           DEFAULT 'Post Production',
 
         active INTEGER NOT NULL
+
           DEFAULT 1,
 
         must_change_password INTEGER NOT NULL
+
           DEFAULT 0,
 
         created_at TEXT NOT NULL
+
           DEFAULT (datetime('now'))
+      );
+    `);
+
+
+    /*
+    ------------------------------------------------
+    COPY EXISTING USERS
+    ------------------------------------------------
+
+    Old departments are translated to the new
+    department names.
+    ------------------------------------------------
+    */
+
+    const existingColumns =
+      getColumns("users");
+
+    const oldHasActive =
+      existingColumns.some(
+        column =>
+          column.name === "active"
+      );
+
+    const oldHasMustChange =
+      existingColumns.some(
+        column =>
+          column.name ===
+          "must_change_password"
+      );
+
+    const oldHasDepartment =
+      existingColumns.some(
+        column =>
+          column.name ===
+          "department"
       );
 
 
+    /*
+    ------------------------------------------------
+    DEPARTMENT MIGRATION
+    ------------------------------------------------
+    */
+
+    let departmentExpression;
+
+    if (oldHasDepartment) {
+
+      departmentExpression = `
+        CASE
+
+          WHEN department IS NULL
+            OR TRIM(department) = ''
+            THEN 'Post Production'
+
+          WHEN department = 'Admin'
+            THEN 'Administration'
+
+          WHEN department = 'Newsroom Creatives'
+            THEN 'Newsroom'
+
+          WHEN department IN (
+            'Newsroom',
+            'Post Production',
+            'Production',
+            'Transmission',
+            'Marketing',
+            'Social Media',
+            'IT',
+            'Musanza',
+            'Security',
+            'Administration',
+            'Programming',
+            'Finance'
+          )
+            THEN department
+
+          ELSE 'Post Production'
+
+        END
+      `;
+
+    } else {
+
+      departmentExpression =
+        `'Post Production'`;
+    }
+
+
+    /*
+    ------------------------------------------------
+    ROLE MIGRATION
+    ------------------------------------------------
+    */
+
+    let roleExpression;
+
+    if (hasRoleColumn) {
+
+      roleExpression = `
+        CASE
+
+          WHEN role = 'user'
+            THEN 'staff'
+
+          WHEN role IN (
+            'staff',
+            'manager',
+            'superuser'
+          )
+            THEN role
+
+          ELSE 'staff'
+
+        END
+      `;
+
+    } else {
+
+      roleExpression =
+        `'staff'`;
+    }
+
+
+    /*
+    ------------------------------------------------
+    ACTIVE
+    ------------------------------------------------
+    */
+
+    const activeExpression =
+      oldHasActive
+        ? `COALESCE(active, 1)`
+        : `1`;
+
+
+    /*
+    ------------------------------------------------
+    MUST CHANGE PASSWORD
+    ------------------------------------------------
+    */
+
+    const mustChangeExpression =
+      oldHasMustChange
+        ? `COALESCE(must_change_password, 0)`
+        : `0`;
+
+
+    /*
+    ------------------------------------------------
+    COPY USERS
+    ------------------------------------------------
+    */
+
+    db.exec(`
       INSERT INTO users_new (
+
         id,
+
         name,
+
         username,
+
         password_hash,
+
         role,
+
         department,
+
         active,
+
         must_change_password,
+
         created_at
+
       )
 
       SELECT
+
         id,
+
         name,
+
         username,
+
         password_hash,
 
-        CASE
-          WHEN role = 'user'
-            THEN 'staff'
-          ELSE role
-        END,
+        ${roleExpression},
 
-        'Post Production',
+        ${departmentExpression},
 
-        1,
+        ${activeExpression},
 
-        0,
+        ${mustChangeExpression},
 
-        created_at
+        COALESCE(
+          created_at,
+          datetime('now')
+        )
 
       FROM users;
+    `);
 
 
+    /*
+    ------------------------------------------------
+    DROP OLD USERS TABLE
+    ------------------------------------------------
+    */
+
+    db.exec(`
       DROP TABLE users;
+    `);
 
 
+    /*
+    ------------------------------------------------
+    RENAME NEW TABLE
+    ------------------------------------------------
+    */
+
+    db.exec(`
       ALTER TABLE users_new
       RENAME TO users;
     `);
 
-    db.pragma("foreign_keys = ON");
+
+    /*
+    ------------------------------------------------
+    FOREIGN KEYS BACK ON
+    ------------------------------------------------
+    */
+
+    db.pragma(
+      "foreign_keys = ON"
+    );
 
     console.log(
-      "✅ Users table migration complete."
+      "✅ Users table migrated successfully."
     );
   }
 
 
   /*
-  --------------------------------------------------
-  ADD ACTIVE COLUMN
-  --------------------------------------------------
+  ==================================================
+  NORMALISE ROLE
+  ==================================================
   */
 
-  else if (!hasActiveColumn) {
+  db.prepare(`
+    UPDATE users
 
-    console.log(
-      "🔄 Adding active column..."
-    );
+    SET role = 'staff'
 
-    db.exec(`
-      ALTER TABLE users
-      ADD COLUMN active INTEGER
-      NOT NULL DEFAULT 1
-    `);
-
-    console.log(
-      "✅ Active column added."
-    );
-  }
+    WHERE role = 'user'
+  `).run();
 
 
   /*
-  --------------------------------------------------
-  ADD PASSWORD CHANGE COLUMN
-  --------------------------------------------------
+  ==================================================
+  NORMALISE DEPARTMENTS
+  ==================================================
   */
 
-  if (
-    !hasMustChangePasswordColumn &&
-    !hasOldRoleConstraint
-  ) {
+  db.prepare(`
+    UPDATE users
 
-    console.log(
-      "🔄 Adding must_change_password column..."
-    );
+    SET department = 'Administration'
 
-    db.exec(`
-      ALTER TABLE users
-      ADD COLUMN must_change_password INTEGER
-      NOT NULL DEFAULT 0
-    `);
-
-    console.log(
-      "✅ Password-change column added."
-    );
-  }
+    WHERE department = 'Admin'
+  `).run();
 
 
-  /*
-  --------------------------------------------------
-  ADD DEPARTMENT COLUMN
-  --------------------------------------------------
-  */
+  db.prepare(`
+    UPDATE users
 
-  if (
-    !hasDepartmentColumn &&
-    !hasOldRoleConstraint
-  ) {
+    SET department = 'Newsroom'
 
-    console.log(
-      "🔄 Adding department column..."
-    );
+    WHERE department = 'Newsroom Creatives'
+  `).run();
 
-    db.exec(`
-      ALTER TABLE users
-      ADD COLUMN department TEXT
-      NOT NULL
-      DEFAULT 'Post Production'
-    `);
 
-    console.log(
-      "✅ User department column added."
-    );
-  }
+  db.prepare(`
+    UPDATE users
+
+    SET department = 'Post Production'
+
+    WHERE department IS NULL
+
+       OR TRIM(department) = ''
+
+       OR department NOT IN (
+          'Newsroom',
+          'Post Production',
+          'Production',
+          'Transmission',
+          'Marketing',
+          'Social Media',
+          'IT',
+          'Musanza',
+          'Security',
+          'Administration',
+          'Programming',
+          'Finance'
+       )
+  `).run();
 }
 
 
 /*
 ====================================================
-NORMALISE OLD USER ROLE
+EQUIPMENT TABLE
 ====================================================
 */
 
-db.prepare(`
-  UPDATE users
-  SET role = 'staff'
-  WHERE role = 'user'
-`).run();
+if (!tableExists("equipment")) {
 
-
-/*
-====================================================
-NORMALISE USER DEPARTMENTS
-====================================================
-*/
-
-db.prepare(`
-  UPDATE users
-
-  SET department = 'Post Production'
-
-  WHERE department IS NULL
-     OR TRIM(department) = ''
-`).run();
-
-
-/*
-====================================================
-CREATE EQUIPMENT TABLE
-====================================================
-*/
-
-const equipmentTable = db
-  .prepare(`
-    SELECT name, sql
-    FROM sqlite_master
-    WHERE type = 'table'
-      AND name = 'equipment'
-  `)
-  .get();
-
-
-if (!equipmentTable) {
+  console.log(
+    "🔄 Creating equipment table..."
+  );
 
   db.exec(`
     CREATE TABLE equipment (
@@ -383,6 +754,7 @@ if (!equipmentTable) {
       category TEXT NOT NULL,
 
       department TEXT NOT NULL
+
         CHECK (
           department IN (
             'Post Production',
@@ -390,11 +762,13 @@ if (!equipmentTable) {
             'Social Media'
           )
         )
+
         DEFAULT 'Post Production',
 
       serial_number TEXT UNIQUE,
 
       status TEXT NOT NULL
+
         CHECK (
           status IN (
             'available',
@@ -402,11 +776,13 @@ if (!equipmentTable) {
             'repair'
           )
         )
+
         DEFAULT 'available',
 
       notes TEXT,
 
       created_at TEXT NOT NULL
+
         DEFAULT (datetime('now'))
     );
   `);
@@ -415,42 +791,35 @@ if (!equipmentTable) {
     "✅ Equipment table created."
   );
 
-}
+} else {
 
-
-/*
-====================================================
-MIGRATE EXISTING EQUIPMENT TABLE
-====================================================
-*/
-
-else {
-
-  const equipmentColumns = db
-    .prepare("PRAGMA table_info(equipment)")
-    .all();
+  const equipmentColumns =
+    getColumns("equipment");
 
   const hasDepartmentColumn =
     equipmentColumns.some(
-      column => column.name === "department"
+      column =>
+        column.name === "department"
     );
 
   const hasSerialNumberColumn =
     equipmentColumns.some(
-      column => column.name === "serial_number"
+      column =>
+        column.name ===
+        "serial_number"
     );
 
 
   /*
   --------------------------------------------------
-  ADD DEPARTMENT
+  ADD EQUIPMENT DEPARTMENT
   --------------------------------------------------
   */
 
   if (!hasDepartmentColumn) {
 
     console.log(
-      "🔄 Adding equipment department..."
+      "🔄 Adding equipment.department..."
     );
 
     db.exec(`
@@ -475,7 +844,7 @@ else {
   if (!hasSerialNumberColumn) {
 
     console.log(
-      "🔄 Adding equipment serial number..."
+      "🔄 Adding equipment.serial_number..."
     );
 
     db.exec(`
@@ -502,7 +871,14 @@ db.prepare(`
   SET department = 'Post Production'
 
   WHERE department IS NULL
+
      OR TRIM(department) = ''
+
+     OR department NOT IN (
+       'Post Production',
+       'IT',
+       'Social Media'
+     )
 `).run();
 
 
@@ -519,27 +895,22 @@ db.exec(`
   ON equipment(serial_number)
 
   WHERE serial_number IS NOT NULL
+
     AND TRIM(serial_number) != '';
 `);
 
 
 /*
 ====================================================
-CREATE BOOKINGS TABLE
+BOOKINGS TABLE
 ====================================================
 */
 
-const bookingsTable = db
-  .prepare(`
-    SELECT name
-    FROM sqlite_master
-    WHERE type = 'table'
-      AND name = 'bookings'
-  `)
-  .get();
+if (!tableExists("bookings")) {
 
-
-if (!bookingsTable) {
+  console.log(
+    "🔄 Creating bookings table..."
+  );
 
   db.exec(`
     CREATE TABLE bookings (
@@ -552,13 +923,11 @@ if (!bookingsTable) {
 
         ON DELETE CASCADE,
 
-
       requester_id INTEGER NOT NULL
 
         REFERENCES users(id)
 
         ON DELETE CASCADE,
-
 
       requester_name TEXT NOT NULL,
 
@@ -579,10 +948,10 @@ if (!bookingsTable) {
 
         DEFAULT 'pending',
 
-
       gate_pass_code TEXT,
 
       requested_at TEXT NOT NULL
+
         DEFAULT (datetime('now')),
 
       decided_at TEXT,
@@ -601,7 +970,7 @@ if (!bookingsTable) {
 
 /*
 ====================================================
-CREATE INDEXES
+INDEXES
 ====================================================
 */
 
@@ -646,29 +1015,39 @@ SEED DEFAULT USERS
 ====================================================
 */
 
-const userCount = db
-  .prepare(`
-    SELECT COUNT(*) AS c
-    FROM users
-  `)
-  .get().c;
+const userCount =
+  db
+    .prepare(`
+      SELECT COUNT(*) AS c
+      FROM users
+    `)
+    .get().c;
 
 
 if (userCount === 0) {
 
-  const insertUser = db.prepare(`
-    INSERT INTO users (
-      name,
-      username,
-      password_hash,
-      role,
-      department,
-      active,
-      must_change_password
-    )
+  const insertUser =
+    db.prepare(`
+      INSERT INTO users (
 
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
+        name,
+
+        username,
+
+        password_hash,
+
+        role,
+
+        department,
+
+        active,
+
+        must_change_password
+
+      )
+
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
 
 
   /*
@@ -705,7 +1084,7 @@ if (userCount === 0) {
       10
     ),
     "manager",
-    "Admin",
+    "Administration",
     1,
     0
   );
@@ -741,379 +1120,168 @@ if (userCount === 0) {
 ====================================================
 POST PRODUCTION EQUIPMENT
 ====================================================
-
-55 existing Post Production items.
-
-Serial numbers are NULL until the actual
-physical serial numbers are entered.
-====================================================
 */
 
 const postProductionEquipment = [
 
-  [
-    "PP-001",
-    "JBL Speaker SRX700 (15inch)",
-    "Audio"
-  ],
+  ["PP-001", "JBL Speaker SRX700 (15inch)", "Audio"],
 
-  [
-    "PP-002",
-    "JBL Base Bin STX800",
-    "Audio"
-  ],
+  ["PP-002", "JBL Base Bin STX800", "Audio"],
 
-  [
-    "PP-003",
-    "Amplifier JBL MP-70",
-    "Audio"
-  ],
+  ["PP-003", "Amplifier JBL MP-70", "Audio"],
 
-  [
-    "PP-004",
-    "Yamaha 12 Channels Audio Mixer",
-    "Audio"
-  ],
+  ["PP-004", "Yamaha 12 Channels Audio Mixer", "Audio"],
 
-  [
-    "PP-005",
-    "Speaker Stand WD-502",
-    "Stands"
-  ],
+  ["PP-005", "Speaker Stand WD-502", "Stands"],
 
-  [
-    "PP-006",
-    "Beam Moving Head (260)",
-    "Lighting"
-  ],
+  ["PP-006", "Beam Moving Head (260)", "Lighting"],
 
-  [
-    "PP-007",
-    "Canon C100 MKII Camera",
-    "Cameras"
-  ],
+  ["PP-007", "Canon C100 MKII Camera", "Cameras"],
 
-  [
-    "PP-008",
-    "SONY PMW-400",
-    "Cameras"
-  ],
+  ["PP-008", "SONY PMW-400", "Cameras"],
 
-  [
-    "PP-009",
-    "JVC GY-HM750E Camera",
-    "Cameras"
-  ],
+  ["PP-009", "JVC GY-HM750E Camera", "Cameras"],
 
-  [
-    "PP-010",
-    "SONY XDCAM - PXW-X70",
-    "Cameras"
-  ],
+  ["PP-010", "SONY XDCAM - PXW-X70", "Cameras"],
 
-  [
-    "PP-011",
-    "Nikon D5600 Camera",
-    "Cameras"
-  ],
+  ["PP-011", "Nikon D5600 Camera", "Cameras"],
 
-  [
-    "PP-012",
-    "Small Light Hongbad LED",
-    "Lighting"
-  ],
+  ["PP-012", "Small Light Hongbad LED", "Lighting"],
 
-  [
-    "PP-013",
-    "Big Light Tolifo LED",
-    "Lighting"
-  ],
+  ["PP-013", "Big Light Tolifo LED", "Lighting"],
 
-  [
-    "PP-014",
-    "BOYA Lapel Mic",
-    "Microphones"
-  ],
+  ["PP-014", "BOYA Lapel Mic", "Microphones"],
 
-  [
-    "PP-015",
-    "TASCAM Sound",
-    "Audio"
-  ],
+  ["PP-015", "TASCAM Sound", "Audio"],
 
-  [
-    "PP-016",
-    "Wireless Microphone 4 Ways BNK",
-    "Microphones"
-  ],
+  ["PP-016", "Wireless Microphone 4 Ways BNK", "Microphones"],
 
-  [
-    "PP-017",
-    "Light Stand",
-    "Stands"
-  ],
+  ["PP-017", "Light Stand", "Stands"],
 
-  [
-    "PP-018",
-    "C Stand",
-    "Stands"
-  ],
+  ["PP-018", "C Stand", "Stands"],
 
-  [
-    "PP-019",
-    "Medium Tripod Stand",
-    "Stands"
-  ],
+  ["PP-019", "Medium Tripod Stand", "Stands"],
 
-  [
-    "PP-020",
-    "Big Tripod Stand",
-    "Stands"
-  ],
+  ["PP-020", "Big Tripod Stand", "Stands"],
 
-  [
-    "PP-021",
-    "Small Tripod Stand",
-    "Stands"
-  ],
+  ["PP-021", "Small Tripod Stand", "Stands"],
 
-  [
-    "PP-022",
-    "Big Dolly",
-    "Camera Support"
-  ],
+  ["PP-022", "Big Dolly", "Camera Support"],
 
-  [
-    "PP-023",
-    "Small Dolly",
-    "Camera Support"
-  ],
+  ["PP-023", "Small Dolly", "Camera Support"],
 
-  [
-    "PP-024",
-    "C100 Battery Pack",
-    "Batteries"
-  ],
+  ["PP-024", "C100 Battery Pack", "Batteries"],
 
-  [
-    "PP-025",
-    "LATT Lithium Battery",
-    "Batteries"
-  ],
+  ["PP-025", "LATT Lithium Battery", "Batteries"],
 
-  [
-    "PP-026",
-    "Nikon Battery",
-    "Batteries"
-  ],
+  ["PP-026", "Nikon Battery", "Batteries"],
 
-  [
-    "PP-027",
-    "Charger LATT Lithium",
-    "Chargers"
-  ],
+  ["PP-027", "Charger LATT Lithium", "Chargers"],
 
-  [
-    "PP-028",
-    "Charger C100",
-    "Chargers"
-  ],
+  ["PP-028", "Charger C100", "Chargers"],
 
-  [
-    "PP-029",
-    "Charger Nikon",
-    "Chargers"
-  ],
+  ["PP-029", "Charger Nikon", "Chargers"],
 
-  [
-    "PP-030",
-    "Charger AA/AAA",
-    "Chargers"
-  ],
+  ["PP-030", "Charger AA/AAA", "Chargers"],
 
-  [
-    "PP-031",
-    "Gimbal",
-    "Camera Support"
-  ],
+  ["PP-031", "Gimbal", "Camera Support"],
 
-  [
-    "PP-032",
-    "Yamaha Audio Mixer 4 Channel",
-    "Audio"
-  ],
+  ["PP-032", "Yamaha Audio Mixer 4 Channel", "Audio"],
 
-  [
-    "PP-033",
-    "Dynamic Mic",
-    "Microphones"
-  ],
+  ["PP-033", "Dynamic Mic", "Microphones"],
 
-  [
-    "PP-034",
-    "Hollyland",
-    "Wireless Systems"
-  ],
+  ["PP-034", "Hollyland", "Wireless Systems"],
 
-  [
-    "PP-035",
-    "Shure SM58",
-    "Microphones"
-  ],
+  ["PP-035", "Shure SM58", "Microphones"],
 
-  [
-    "PP-036",
-    "HDMI Splitter 8 Port",
-    "Video Equipment"
-  ],
+  ["PP-036", "HDMI Splitter 8 Port", "Video Equipment"],
 
-  [
-    "PP-037",
-    "News Rode Microphone",
-    "Microphones"
-  ],
+  ["PP-037", "News Rode Microphone", "Microphones"],
 
-  [
-    "PP-038",
-    "NTG4 Boom Microphone",
-    "Microphones"
-  ],
+  ["PP-038", "NTG4 Boom Microphone", "Microphones"],
 
-  [
-    "PP-039",
-    "ATEM Mini Pro II",
-    "Video Equipment"
-  ],
+  ["PP-039", "ATEM Mini Pro II", "Video Equipment"],
 
-  [
-    "PP-040",
-    "Rodecaster Pro II",
-    "Audio"
-  ],
+  ["PP-040", "Rodecaster Pro II", "Audio"],
 
-  [
-    "PP-041",
-    "TV",
-    "Displays"
-  ],
+  ["PP-041", "TV", "Displays"],
 
-  [
-    "PP-042",
-    "Podcast Shure Microphone",
-    "Microphones"
-  ],
+  ["PP-042", "Podcast Shure Microphone", "Microphones"],
 
-  [
-    "PP-043",
-    "Podcast Set",
-    "Podcast Equipment"
-  ],
+  ["PP-043", "Podcast Set", "Podcast Equipment"],
 
-  [
-    "PP-044",
-    "HDMI Splitter",
-    "Video Equipment"
-  ],
+  ["PP-044", "HDMI Splitter", "Video Equipment"],
 
-  [
-    "PP-045",
-    "Personal Monitor Wireless System / In Ear",
-    "Monitoring"
-  ],
+  ["PP-045", "Personal Monitor Wireless System / In Ear", "Monitoring"],
 
-  [
-    "PP-046",
-    "Talkback",
-    "Communication"
-  ],
+  ["PP-046", "Talkback", "Communication"],
 
-  [
-    "PP-047",
-    "SONY XDCAM HD Recorder",
-    "Recorders"
-  ],
+  ["PP-047", "SONY XDCAM HD Recorder", "Recorders"],
 
-  [
-    "PP-048",
-    "Long HDMI Cables",
-    "Cables"
-  ],
+  ["PP-048", "Long HDMI Cables", "Cables"],
 
-  [
-    "PP-049",
-    "Long SDI Cables",
-    "Cables"
-  ],
+  ["PP-049", "Long SDI Cables", "Cables"],
 
-  [
-    "PP-050",
-    "Mic Stand",
-    "Stands"
-  ],
+  ["PP-050", "Mic Stand", "Stands"],
 
-  [
-    "PP-051",
-    "Audio Cable",
-    "Cables"
-  ],
+  ["PP-051", "Audio Cable", "Cables"],
 
-  [
-    "PP-052",
-    "Soliton",
-    "Transmission Equipment"
-  ],
+  ["PP-052", "Soliton", "Transmission Equipment"],
 
-  [
-    "PP-053",
-    "LiveU",
-    "Transmission Equipment"
-  ],
+  ["PP-053", "LiveU", "Transmission Equipment"],
 
-  [
-    "PP-054",
-    "Data Video Switcher",
-    "Video Equipment"
-  ],
+  ["PP-054", "Data Video Switcher", "Video Equipment"],
 
-  [
-    "PP-055",
-    "Data Video Monitor",
-    "Displays"
-  ]
+  ["PP-055", "Data Video Monitor", "Displays"]
 
 ];
 
 
 /*
 ====================================================
-INSERT POST PRODUCTION EQUIPMENT
+INSERT EQUIPMENT
 ====================================================
 */
 
-const insertEquipment = db.prepare(`
-  INSERT OR IGNORE INTO equipment (
-    code,
-    name,
-    category,
-    department,
-    serial_number,
-    status
-  )
+const insertEquipment =
+  db.prepare(`
+    INSERT OR IGNORE INTO equipment (
 
-  VALUES (
-    ?,
-    ?,
-    ?,
-    'Post Production',
-    NULL,
-    'available'
-  )
-`);
+      code,
+
+      name,
+
+      category,
+
+      department,
+
+      serial_number,
+
+      status
+
+    )
+
+    VALUES (
+
+      ?,
+
+      ?,
+
+      ?,
+
+      'Post Production',
+
+      NULL,
+
+      'available'
+
+    )
+  `);
 
 
 /*
 ====================================================
-LOAD POST PRODUCTION INVENTORY
+LOAD INVENTORY
 ====================================================
 */
 
@@ -1139,45 +1307,76 @@ DATABASE SUMMARY
 ====================================================
 */
 
-const totalUsers = db
-  .prepare(`
-    SELECT COUNT(*) AS count
-    FROM users
-  `)
-  .get().count;
+const totalUsers =
+  db
+    .prepare(`
+      SELECT COUNT(*) AS count
+      FROM users
+    `)
+    .get().count;
 
 
-const totalEquipment = db
-  .prepare(`
-    SELECT COUNT(*) AS count
-    FROM equipment
-  `)
-  .get().count;
+const totalEquipment =
+  db
+    .prepare(`
+      SELECT COUNT(*) AS count
+      FROM equipment
+    `)
+    .get().count;
 
 
-const totalBookings = db
-  .prepare(`
-    SELECT COUNT(*) AS count
-    FROM bookings
-  `)
-  .get().count;
+const totalBookings =
+  db
+    .prepare(`
+      SELECT COUNT(*) AS count
+      FROM bookings
+    `)
+    .get().count;
 
 
 console.log("");
-console.log("==============================================");
-console.log(" EQUIPMENT TRACKER DATABASE");
-console.log("==============================================");
+
+console.log(
+  "=============================================="
+);
+
+console.log(
+  " EQUIPMENT TRACKER DATABASE"
+);
+
+console.log(
+  "=============================================="
+);
+
 console.log(
   ` Users:      ${totalUsers}`
 );
+
 console.log(
   ` Equipment:  ${totalEquipment}`
 );
+
 console.log(
   ` Bookings:   ${totalBookings}`
 );
-console.log("==============================================");
+
+console.log(
+  "=============================================="
+);
+
 console.log("");
+
+console.log(
+  "User departments:"
+);
+
+USER_DEPARTMENTS.forEach(
+  department => {
+    console.log(
+      ` - ${department}`
+    );
+  }
+);
 
 
 /*
