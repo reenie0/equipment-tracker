@@ -373,19 +373,17 @@ router.post(
 RETURN EQUIPMENT
 ====================================================
 
-Staff:
-    Can return their own equipment.
+Manager OR Super User only.
 
-Manager:
-    Can return any active booking.
-
-Super User:
-    Can return any active booking.
+Staff can no longer self-return equipment — a
+manager or super user must be the one to mark a
+booking returned.
 ====================================================
 */
 
 router.post(
   "/:id/return",
+  requireManager,
   (req, res) => {
 
     const booking = db
@@ -397,20 +395,6 @@ router.post(
     if (!booking) {
       return res.status(404).json({
         error: "Request not found"
-      });
-    }
-
-    const canReturnAny =
-      req.user.role === "manager" ||
-      req.user.role === "superuser";
-
-    if (
-      booking.requester_id !== req.user.id &&
-      !canReturnAny
-    ) {
-      return res.status(403).json({
-        error:
-          "You can only return your own equipment"
       });
     }
 
