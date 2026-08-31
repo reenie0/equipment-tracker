@@ -69,6 +69,15 @@ export default function ManagerReview() {
     }
   };
 
+  const returnEquipment = async (id) => {
+    try {
+      await api.returnBooking(token, id);
+      load();
+    } catch (err) {
+      setToast(err.message);
+    }
+  };
+
   const visible = grouped[tab];
 
   return (
@@ -78,7 +87,7 @@ export default function ManagerReview() {
           <div>
             <p className="eyebrow">Manager Review</p>
             <h1 className="page-title">Booking requests</h1>
-            <p className="page-sub">Approve or deny gate pass requests from the team.</p>
+            <p className="page-sub">Approve or deny gate pass requests, and mark equipment returned, for the team.</p>
           </div>
         </div>
 
@@ -120,7 +129,14 @@ export default function ManagerReview() {
                       </button>
                     </>
                   )}
-                  {b.status === "accepted" && <Countdown expiresAt={b.expires_at} />}
+                  {b.status === "accepted" && (
+                    <>
+                      <Countdown expiresAt={b.expires_at} />
+                      <button className="btn btn-primary btn-sm" onClick={() => returnEquipment(b.id)}>
+                        Mark returned
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
