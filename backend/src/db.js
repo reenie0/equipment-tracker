@@ -958,7 +958,19 @@ if (!tableExists("bookings")) {
 
       expires_at TEXT,
 
-      manager_note TEXT
+      manager_note TEXT,
+
+return_status TEXT
+  CHECK (
+    return_status IN (
+      'available',
+      'repair'
+    )
+  ),
+
+return_note TEXT,
+
+returned_at TEXT
     );
   `);
 
