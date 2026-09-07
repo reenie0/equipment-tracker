@@ -7,7 +7,14 @@ const TABS = [
   { key: "pending", label: "Pending" },
   { key: "accepted", label: "Accepted" },
   { key: "rejected", label: "Rejected" },
+  { key: "completed", label: "Returned" },
 ];
+
+const RETURN_LABELS = {
+  available: "Available",
+  repair: "Gone for repair",
+  out_of_service: "Out of service",
+};
 
 export default function Requests() {
   const { token } = useAuth();
@@ -46,18 +53,10 @@ export default function Requests() {
       pending: bookings.filter((b) => b.status === "pending"),
       accepted: bookings.filter((b) => b.status === "accepted"),
       rejected: bookings.filter((b) => b.status === "rejected"),
+      completed: bookings.filter((b) => b.status === "completed"),
     }),
     [bookings]
   );
-
-  const returnEarly = async (id) => {
-    try {
-      await api.returnBooking(token, id);
-      load();
-    } catch (err) {
-      setToast(err.message);
-    }
-  };
 
   const visible = grouped[tab];
 
@@ -68,7 +67,7 @@ export default function Requests() {
           <div>
             <p className="eyebrow">My Requests</p>
             <h1 className="page-title">Booking requests</h1>
-            <p className="page-sub">Track every gate pass you've requested, from submission to return.</p>
+            <p className="page-sub">Track every gate pass you've requested. A manager marks the equipment returned.</p>
           </div>
         </div>
 
@@ -99,17 +98,16 @@ export default function Requests() {
                   {b.status === "rejected" && b.manager_note && (
                     <span className="manager-note">Manager note: {b.manager_note}</span>
                   )}
+                  {b.status === "completed" && (b.return_status || b.return_note) && (
+                    <span className="manager-note">
+                      Returned as {RETURN_LABELS[b.return_status] || b.return_status || "completed"}
+                      {b.return_note ? ` — ${b.return_note}` : ""}
+                    </span>
+                  )}
                 </div>
 
                 <div className="request-side">
-                  {b.status === "accepted" && (
-                    <>
-                      <Countdown expiresAt={b.expires_at} />
-                      <button className="btn btn-ghost btn-sm" onClick={() => returnEarly(b.id)}>
-                        Return now
-                      </button>
-                    </>
-                  )}
+                  {b.status === "accepted" && <Countdown expiresAt={b.expires_at} />}
                 </div>
               </div>
             ))}
