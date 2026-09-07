@@ -2,6 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 import Countdown from "../components/Countdown";
+import ReturnModal from "../components/ReturnModal";
+import StatusPill from "../components/StatusPill";
+
+const RETURN_LABELS = {
+  available: "Available",
+  repair: "Gone for repair",
+  out_of_service: "Out of service",
+};
 
 const TABS = [
   { key: "pending", label: "Pending" },
@@ -16,6 +24,7 @@ export default function ManagerReview() {
   const [tab, setTab] = useState("pending");
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [returning, setReturning] = useState(null);
 
   const load = async () => {
     try {
@@ -69,13 +78,10 @@ export default function ManagerReview() {
     }
   };
 
-  const returnEquipment = async (id) => {
-    try {
-      await api.returnBooking(token, id);
-      load();
-    } catch (err) {
-      setToast(err.message);
-    }
+  const onReturned = () => {
+    setReturning(null);
+    load();
+    setToast("Equipment marked returned.");
   };
 
   const visible = grouped[tab];
@@ -116,6 +122,12 @@ export default function ManagerReview() {
                     Requested by {b.requester_name} · {b.purpose} · {b.duration_hours}h · pass {b.gate_pass_code}
                   </span>
                   {b.manager_note && <span className="manager-note">Your note: {b.manager_note}</span>}
+                  {b.status === "completed" && (b.return_status || b.return_note) && (
+                    <span className="manager-note">
+                      Returned as {RETURN_LABELS[b.return_status] || b.return_status}
+                      {b.return_note ? ` — ${b.return_note}` : ""}
+                    </span>
+                  )}
                 </div>
 
                 <div className="request-side">
@@ -132,10 +144,13 @@ export default function ManagerReview() {
                   {b.status === "accepted" && (
                     <>
                       <Countdown expiresAt={b.expires_at} />
-                      <button className="btn btn-primary btn-sm" onClick={() => returnEquipment(b.id)}>
+                      <button className="btn btn-primary btn-sm" onClick={() => setReturning(b)}>
                         Mark returned
                       </button>
                     </>
+                  )}
+                  {b.status === "completed" && b.return_status && (
+                    <StatusPill status={b.return_status} />
                   )}
                 </div>
               </div>
@@ -144,7 +159,19 @@ export default function ManagerReview() {
         )}
       </div>
 
-      {toast && <div className="toast error">{toast}</div>}
+      {returning && (
+        <ReturnModal
+          booking={returning}
+          onClose={() => setReturning(null)}
+          onReturned={onReturned}
+        />
+      )}
+
+      {toast && (
+        <div className={`toast${toast === "Equipment marked returned." ? "" : " error"}`}>
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
