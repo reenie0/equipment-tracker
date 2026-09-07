@@ -773,7 +773,8 @@ if (!tableExists("equipment")) {
           status IN (
             'available',
             'booked',
-            'repair'
+            'repair',
+            'out_of_service'
           )
         )
 
@@ -856,49 +857,113 @@ if (!tableExists("equipment")) {
       "✅ Equipment serial number added."
     );
   }
+
+
+  /*
+  --------------------------------------------------
+  ADD 'out_of_service' TO STATUS CHECK
+  --------------------------------------------------
+
+  This modifies an existing CHECK constraint, which
+  SQLite can only do by rebuilding the table. The
+  whole rebuild runs inside a single transaction so
+  a failure partway through can never leave a stray
+  equipment_new table behind — the same class of bug
+  that previously got bookings_new stuck permanently.
+  --------------------------------------------------
+  */
+
+  const equipmentSql =
+    getTableSql("equipment");
+
+  const hasOutOfService =
+    equipmentSql.includes(
+      "out_of_service"
+    );
+
+  if (!hasOutOfService) {
+
+    console.log(
+      "🔄 Migrating equipment table to support out_of_service status..."
+    );
+
+    db.pragma("foreign_keys = OFF");
+
+    db.exec(`DROP TABLE IF EXISTS equipment_new;`);
+
+    const migrateEquipment =
+      db.transaction(() => {
+
+        db.exec(`
+          CREATE TABLE equipment_new (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            code TEXT UNIQUE NOT NULL,
+
+            name TEXT NOT NULL,
+
+            category TEXT NOT NULL,
+
+            department TEXT NOT NULL
+
+              CHECK (
+                department IN (
+                  'Post Production',
+                  'IT',
+                  'Social Media'
+                )
+              )
+
+              DEFAULT 'Post Production',
+
+            serial_number TEXT UNIQUE,
+
+            status TEXT NOT NULL
+
+              CHECK (
+                status IN (
+                  'available',
+                  'booked',
+                  'repair',
+                  'out_of_service'
+                )
+              )
+
+              DEFAULT 'available',
+
+            notes TEXT,
+
+            created_at TEXT NOT NULL
+
+              DEFAULT (datetime('now'))
+          );
+
+          INSERT INTO equipment_new (
+            id, code, name, category, department,
+            serial_number, status, notes, created_at
+          )
+          SELECT
+            id, code, name, category, department,
+            serial_number, status, notes, created_at
+          FROM equipment;
+
+          DROP TABLE equipment;
+
+          ALTER TABLE equipment_new
+          RENAME TO equipment;
+        `);
+      });
+
+    migrateEquipment();
+
+    db.pragma("foreign_keys = ON");
+
+    console.log(
+      "✅ Equipment table migration complete."
+    );
+  }
 }
-
-
-/*
-====================================================
-NORMALISE EQUIPMENT DEPARTMENTS
-====================================================
-*/
-
-db.prepare(`
-  UPDATE equipment
-
-  SET department = 'Post Production'
-
-  WHERE department IS NULL
-
-     OR TRIM(department) = ''
-
-     OR department NOT IN (
-       'Post Production',
-       'IT',
-       'Social Media'
-     )
-`).run();
-
-
-/*
-====================================================
-SERIAL NUMBER INDEX
-====================================================
-*/
-
-db.exec(`
-  CREATE UNIQUE INDEX IF NOT EXISTS
-  idx_equipment_serial_number
-
-  ON equipment(serial_number)
-
-  WHERE serial_number IS NOT NULL
-
-    AND TRIM(serial_number) != '';
-`);
-
 
 /*
 ====================================================
@@ -960,23 +1025,112 @@ if (!tableExists("bookings")) {
 
       manager_note TEXT,
 
-return_status TEXT
-  CHECK (
-    return_status IN (
-      'available',
-      'repair'
-    )
-  ),
+      return_status TEXT
+        CHECK (
+          return_status IN (
+            'available',
+            'repair',
+            'out_of_service'
+          )
+        ),
 
-return_note TEXT,
+      return_note TEXT,
 
-returned_at TEXT
+      returned_at TEXT
     );
   `);
 
   console.log(
     "✅ Bookings table created."
   );
+
+}
+
+
+/*
+====================================================
+MIGRATE EXISTING BOOKINGS TABLE
+====================================================
+
+The return_status / return_note / returned_at
+columns above only get created for a brand new
+database. Your bookings table already exists, so
+without this branch it would never get them.
+
+return_status has no CHECK constraint at the ALTER
+TABLE level — validation happens in bookings.js
+instead. That means adding another allowed status
+later never requires rebuilding this table.
+====================================================
+*/
+
+else {
+
+  const bookingsColumns =
+    getColumns("bookings");
+
+  const hasReturnStatus =
+    bookingsColumns.some(
+      column => column.name === "return_status"
+    );
+
+  const hasReturnNote =
+    bookingsColumns.some(
+      column => column.name === "return_note"
+    );
+
+  const hasReturnedAt =
+    bookingsColumns.some(
+      column => column.name === "returned_at"
+    );
+
+  if (!hasReturnStatus) {
+
+    console.log(
+      "🔄 Adding bookings.return_status..."
+    );
+
+    db.exec(`
+      ALTER TABLE bookings
+      ADD COLUMN return_status TEXT
+    `);
+
+    console.log(
+      "✅ bookings.return_status added."
+    );
+  }
+
+  if (!hasReturnNote) {
+
+    console.log(
+      "🔄 Adding bookings.return_note..."
+    );
+
+    db.exec(`
+      ALTER TABLE bookings
+      ADD COLUMN return_note TEXT
+    `);
+
+    console.log(
+      "✅ bookings.return_note added."
+    );
+  }
+
+  if (!hasReturnedAt) {
+
+    console.log(
+      "🔄 Adding bookings.returned_at..."
+    );
+
+    db.exec(`
+      ALTER TABLE bookings
+      ADD COLUMN returned_at TEXT
+    `);
+
+    console.log(
+      "✅ bookings.returned_at added."
+    );
+  }
 }
 
 
@@ -1248,14 +1402,237 @@ const postProductionEquipment = [
 
 ];
 
-
 /*
 ====================================================
-INSERT EQUIPMENT
+IT EQUIPMENT
 ====================================================
 */
 
-const insertEquipment =
+const itEquipment = [
+
+  /*
+  --------------------------------------------------
+  TABLETS
+  --------------------------------------------------
+  */
+
+  [
+    "IT-001",
+    "Galaxy Tab S10",
+    "Tablets",
+    "R5GYB1C2PPH",
+    null
+  ],
+
+  [
+    "IT-002",
+    "Galaxy Tab S10",
+    "Tablets",
+    "R5GYB3EN1FB",
+    null
+  ],
+
+
+  /*
+  --------------------------------------------------
+  LAPTOPS
+  --------------------------------------------------
+  */
+
+  [
+    "IT-003",
+    "HP ProBook 450 G9",
+    "Laptops",
+    "5CD3484JV",
+    null
+  ],
+
+  [
+    "IT-004",
+    "HP ProBook 450 G8",
+    "Laptops",
+    "5CD147LBVS",
+    null
+  ],
+
+  [
+    "IT-005",
+    "HP ProBook 450 G9",
+    "Laptops",
+    "5CD410CM78",
+    null
+  ],
+
+  [
+    "IT-006",
+    "HP ProBook 450 G9",
+    "Laptops",
+    "5CD3493N10",
+    null
+  ],
+
+
+  /*
+  --------------------------------------------------
+  PHONES
+  --------------------------------------------------
+  */
+
+  ["IT-007", "Samsung Phone", "Phones", "R5GL11JVOZA", "Color: Peach Pink"],
+  ["IT-008", "Samsung Phone", "Phones", "R5GL15B7GDW", "Color: Peach Pink"],
+  ["IT-009", "Samsung Phone", "Phones", "R5GL13V9LEA", "Color: Peach Pink"],
+  ["IT-010", "Samsung Phone", "Phones", "R5GL11JT061", "Color: Peach Pink"],
+  ["IT-011", "Samsung Phone", "Phones", "R5GL13V9ERX", "Color: Peach Pink"],
+  ["IT-012", "Samsung Phone", "Phones", "R5GL13V9E1W", "Color: Peach Pink"],
+  ["IT-013", "Samsung Phone", "Phones", "R5GYB402HYM", "Color: Peach Pink"],
+  ["IT-014", "Samsung Phone", "Phones", "R5GL15B7AEW", "Color: Peach Pink"],
+  ["IT-015", "Samsung Phone", "Phones", "R5GYB4023WJ", "Color: Peach Pink"],
+  ["IT-016", "Samsung Phone", "Phones", "R5GYB402MYK", "Color: Peach Pink"],
+  ["IT-017", "Samsung Phone", "Phones", "R5GL20LNG6J", "Color: Peach Pink"],
+  ["IT-018", "Samsung Phone", "Phones", "R5GL15B7AJK", "Color: Peach Pink"],
+
+  ["IT-019", "Samsung Phone", "Phones", "R5GL21Q9GAX", "Color: Pink"],
+  ["IT-020", "Samsung Phone", "Phones", "R5GL20LNG3W", "Color: Pink"],
+  ["IT-021", "Samsung Phone", "Phones", "R5GL13V9DEV", "Color: Pink"],
+  ["IT-022", "Samsung Phone", "Phones", "R5GYB40245L", "Color: Pink"],
+  ["IT-023", "Samsung Phone", "Phones", "R5GYB40242E", "Color: Pink"],
+  ["IT-024", "Samsung Phone", "Phones", "R5GL11A32GF", "Color: Pink"],
+  ["IT-025", "Samsung Phone", "Phones", "R5GYB401ZFP", "Color: Pink"],
+  ["IT-026", "Samsung Phone", "Phones", "R5GL13V9DYA", "Color: Pink"],
+  ["IT-027", "Samsung Phone", "Phones", "R5GYB402AKB", "Color: Pink"],
+  ["IT-028", "Samsung Phone", "Phones", "R5GYB4022QM", "Color: Pink"],
+  ["IT-029", "Samsung Phone", "Phones", "R5GL15B7K9J", "Color: Pink"],
+  ["IT-030", "Samsung Phone", "Phones", "R5GL20LNJDD", "Color: Pink"],
+  ["IT-031", "Samsung Phone", "Phones", "R5GL11A42GR", "Color: Pink"],
+  ["IT-032", "Samsung Phone", "Phones", "R5GL211HKMK", "Color: Pink"],
+  ["IT-033", "Samsung Phone", "Phones", "R5GL11JT1EZ", "Color: Pink"],
+  ["IT-034", "Samsung Phone", "Phones", "R5GL20LAHWD", "Color: Pink"],
+  ["IT-035", "Samsung Phone", "Phones", "R5GL11JT4QV", "Color: Pink"],
+  ["IT-036", "Samsung Phone", "Phones", "R5GL11JSVLW", "Color: Pink"],
+  ["IT-037", "Samsung Phone", "Phones", "R5GL11A43ZJ", "Color: Pink"],
+  ["IT-038", "Samsung Phone", "Phones", "R5GL15B7JTD", "Color: Pink"],
+  ["IT-039", "Samsung Phone", "Phones", "R5GL15B7HQD", "Color: Pink"],
+  ["IT-040", "Samsung Phone", "Phones", "R5GL20LNFQT", "Color: Pink"],
+  ["IT-041", "Samsung Phone", "Phones", "R5GL20LNGRJ", "Color: Pink"],
+  ["IT-042", "Samsung Phone", "Phones", "R5GL13V9MLY", "Color: Pink"],
+  ["IT-043", "Samsung Phone", "Phones", "R5GL15B78NA", "Color: Pink"],
+  ["IT-044", "Samsung Phone", "Phones", "R5GL20LNK1V", "Color: Pink"],
+
+  ["IT-045", "Samsung Phone", "Phones", "R5GYB3JXQFP", "Color: White"],
+  ["IT-046", "Samsung Phone", "Phones", "R5GYB3JXSKD", "Color: White"],
+  ["IT-047", "Samsung Phone", "Phones", "R5GYB3AAKGH", "Color: White"],
+  ["IT-048", "Samsung Phone", "Phones", "R5GYB3AAX7M", "Color: White"],
+  ["IT-049", "Samsung Phone", "Phones", "R5GYB3AANEN", "Color: White"],
+  ["IT-050", "Samsung Phone", "Phones", "R5GYB3JXP2F", "Color: White"],
+  ["IT-051", "Samsung Phone", "Phones", "R5GYB3AAPBR", "Color: White"],
+  ["IT-052", "Samsung Phone", "Phones", "R5GYB3JXNLE", "Color: White"],
+  ["IT-053", "Samsung Phone", "Phones", "R5GYB3JXR1A", "Color: White"],
+  ["IT-054", "Samsung Phone", "Phones", "R5GYB3AA7ZP", "Color: White"],
+  ["IT-055", "Samsung Phone", "Phones", "R5GYB3JXSWK", "Color: White"],
+  ["IT-056", "Samsung Phone", "Phones", "R5GYB3AADTX", "Color: White"],
+  ["IT-057", "Samsung Phone", "Phones", "R5GYB3AAK6L", "Color: White"],
+  ["IT-058", "Samsung Phone", "Phones", "R5GYB3JXMSM", "Color: White"],
+
+  ["IT-059", "Samsung Phone", "Phones", "R5GYB402H5N", "Color: Pink"],
+  ["IT-060", "Samsung Phone", "Phones", "R5GL158798V", "Color: Pink"],
+
+  ["IT-061", "Samsung Phone", "Phones", "R5GYB3JXVNL", "Color: White"],
+  ["IT-062", "Samsung Phone", "Phones", "R5GYB3JXQRB", "Color: White"],
+  ["IT-063", "Samsung Phone", "Phones", "R5GYB3JXPCP", "Color: White"],
+  ["IT-064", "Samsung Phone", "Phones", "R5GYB3AAY1E", "Color: White"],
+  ["IT-065", "Samsung Phone", "Phones", "R5GYB3AAXAY", "Color: White"],
+
+  ["IT-066", "Samsung Phone", "Phones", "R5GYA0RTBXF", "Color: Black"],
+  ["IT-067", "Samsung Phone", "Phones", "R5GYA0RTZWN", "Color: Black"],
+  ["IT-068", "Samsung Phone", "Phones", "R5GL20LNL4V", "Color: Black"],
+  ["IT-069", "Samsung Phone", "Phones", "R5GYB3RQ7XZ", "Color: Black"],
+  ["IT-070", "Samsung Phone", "Phones", "R5GL20LNKHT", "Color: Black"],
+  ["IT-071", "Samsung Phone", "Phones", "R5GL134CPGL", "Color: Black"],
+  ["IT-072", "Samsung Phone", "Phones", "R5GL20LNNNN", "Color: Black"],
+  ["IT-073", "Samsung Phone", "Phones", "R5GL20LNQAK", "Color: Black"],
+  ["IT-074", "Samsung Phone", "Phones", "R5GL134CLLB", "Color: Black"],
+  ["IT-075", "Samsung Phone", "Phones", "R5GL20LNPXR", "Color: Black"],
+  ["IT-076", "Samsung Phone", "Phones", "R5GL134C4VJ", "Color: Black"],
+  ["IT-077", "Samsung Phone", "Phones", "R5GYB09992D", "Color: Black"],
+  ["IT-078", "Samsung Phone", "Phones", "R5GYB2T7TWT", "Color: Black"],
+  ["IT-079", "Samsung Phone", "Phones", "R5GL20LNNFB", "Color: Black"],
+  ["IT-080", "Samsung Phone", "Phones", "R5GYB4BDJJL", "Color: Black"],
+  ["IT-081", "Samsung Phone", "Phones", "R5GYB09B20E", "Color: Black"],
+  ["IT-082", "Samsung Phone", "Phones", "R5GYB3EBDYY", "Color: Black"],
+  ["IT-083", "Samsung Phone", "Phones", "R5GL20LNPTJ", "Color: Black"],
+  ["IT-084", "Samsung Phone", "Phones", "R5GL20LNROV", "Color: Black"],
+  ["IT-085", "Samsung Phone", "Phones", "R5GL20LNKZN", "Color: Black"],
+  ["IT-086", "Samsung Phone", "Phones", "R5GYB1SPQ4E", "Color: Black"],
+  ["IT-087", "Samsung Phone", "Phones", "R5GYA0RTCJY", "Color: Black"],
+  ["IT-088", "Samsung Phone", "Phones", "R5GYB09BNEJ", "Color: Black"],
+  ["IT-089", "Samsung Phone", "Phones", "R5GYA0RTBWX", "Color: Black"],
+  ["IT-090", "Samsung Phone", "Phones", "R5GYB09B2QV", "Color: Black"],
+  ["IT-091", "Samsung Phone", "Phones", "R5GL134BQXD", "Color: Black"],
+  ["IT-092", "Samsung Phone", "Phones", "R5GYB09A4EJ", "Color: Black"],
+  ["IT-093", "Samsung Phone", "Phones", "R5GYB09C15V", "Color: Black"],
+  ["IT-094", "Samsung Phone", "Phones", "R5GYB1Z4ELM", "Color: Black"],
+  ["IT-095", "Samsung Phone", "Phones", "R5GL20LNPSW", "Color: Black"],
+  ["IT-096", "Samsung Phone", "Phones", "R5GYB09BN7X", "Color: Black"],
+  ["IT-097", "Samsung Phone", "Phones", "R5GYA0RTZ3D", "Color: Black"],
+  ["IT-098", "Samsung Phone", "Phones", "R5GL20LNMFL", "Color: Black"],
+  ["IT-099", "Samsung Phone", "Phones", "R5GYB3EAW3R", "Color: Black"],
+
+  ["IT-100", "Samsung Phone", "Phones", "R5GYB3AANTR", "Color: White"],
+
+  ["IT-101", "Samsung Phone", "Phones", "R5GL12V1N1M", "Color: Black"],
+  ["IT-102", "Samsung Phone", "Phones", "R5GYB3CZW9B", "Color: Black"],
+  ["IT-103", "Samsung Phone", "Phones", "R5GL20LNQ1X", "Color: Black"],
+  ["IT-104", "Samsung Phone", "Phones", "R5GYA0RTCBK", "Color: Black"],
+  ["IT-105", "Samsung Phone", "Phones", "R5GYB09BNNE", "Color: Black"],
+  ["IT-106", "Samsung Phone", "Phones", "R5GYA0RTLXP", "Color: Black"],
+  ["IT-107", "Samsung Phone", "Phones", "R5GL134C34K", "Color: Black"],
+  ["IT-108", "Samsung Phone", "Phones", "R5GL20LNKXY", "Color: Black"],
+
+  ["IT-109", "Samsung Phone", "Phones", "R5GL15B7BPJ", "Color: Peach Pink"],
+  ["IT-110", "Samsung Phone", "Phones", "R5GL20LNPFZ", "Color: Black"],
+  ["IT-111", "Samsung Phone", "Phones", "R5GL12V1F5H", "Color: Black"],
+  ["IT-112", "Samsung Phone", "Phones", "R5GL12V1HZP", "Color: Black"],
+  ["IT-113", "Samsung Phone", "Phones", "R5GYB099MXF", "Color: Black"],
+  ["IT-114", "Samsung Phone", "Phones", "R5GYB09B24X", "Color: Black"],
+  ["IT-115", "Samsung Phone", "Phones", "R5GYB1SP9YR", "Color: Black"],
+  ["IT-116", "Samsung Phone", "Phones", "R5GYB3RQ7ZK", "Color: Black"],
+  ["IT-117", "Samsung Phone", "Phones", "R5GL20LNMJW", "Color: Black"],
+
+  ["IT-118", "Samsung Phone", "Phones", "R5GL13V9LNM", "Color: Peach Pink"],
+  ["IT-119", "Samsung Phone", "Phones", "R5GL11JTYMD", "Color: Peach Pink"],
+  ["IT-120", "Samsung Phone", "Phones", "R5GL11A43RE", "Color: Peach Pink"],
+  ["IT-121", "Samsung Phone", "Phones", "R5GL11JTYEZ", "Color: Peach Pink"],
+  ["IT-122", "Samsung Phone", "Phones", "R5GL11JTYCE", "Color: Peach Pink"],
+  ["IT-123", "Samsung Phone", "Phones", "R5GL15B7CSJ", "Color: Peach Pink"],
+  ["IT-124", "Samsung Phone", "Phones", "R5GL13V9B4R", "Color: Peach Pink"],
+  ["IT-125", "Samsung Phone", "Phones", "R5GL15B7GZW", "Color: Peach Pink"],
+  ["IT-126", "Samsung Phone", "Phones", "R5GL13VNERX", "Color: Peach Pink"],
+  ["IT-127", "Samsung Phone", "Phones", "R5GL13V8YAE", "Color: Peach Pink"],
+  ["IT-128", "Samsung Phone", "Phones", "R5GL20LNHNL", "Color: Peach Pink"],
+  ["IT-129", "Samsung Phone", "Phones", "R5GL20LNJBK", "Color: Peach Pink"],
+  ["IT-130", "Samsung Phone", "Phones", "R5GL20LNJWN", "Color: Peach Pink"],
+  ["IT-131", "Samsung Phone", "Phones", "R5GL15B7J1Z", "Color: Peach Pink"],
+  ["IT-132", "Samsung Phone", "Phones", "R5GL13V98QM", "Color: Peach Pink"],
+  ["IT-133", "Samsung Phone", "Phones", "R5GL15B7GPT", "Color: Peach Pink"],
+  ["IT-134", "Samsung Phone", "Phones", "R5GL11JV18J", "Color: Peach Pink"],
+  ["IT-135", "Samsung Phone", "Phones", "R5GL11A3DSP", "Color: Peach Pink"],
+  ["IT-136", "Samsung Phone", "Phones", "R5GL13V9LBP", "Color: Peach Pink"],
+  ["IT-137", "Samsung Phone", "Phones", "R5GL11JTYLB", "Color: Peach Pink"],
+  ["IT-138", "Samsung Phone", "Phones", "R5GL11JTE2N", "Color: Peach Pink"]
+
+];
+
+
+
+
+
+/*
+====================================================
+INSERT POST PRODUCTION EQUIPMENT
+====================================================
+*/
+
+const insertPostProductionEquipment =
   db.prepare(`
     INSERT OR IGNORE INTO equipment (
 
@@ -1275,17 +1652,7 @@ const insertEquipment =
 
     VALUES (
 
-      ?,
-
-      ?,
-
-      ?,
-
-      'Post Production',
-
-      NULL,
-
-      'available'
+      ?, ?, ?, 'Post Production', NULL, 'available'
 
     )
   `);
@@ -1293,23 +1660,58 @@ const insertEquipment =
 
 /*
 ====================================================
-LOAD INVENTORY
+INSERT IT EQUIPMENT
+====================================================
+*/
+
+const insertITEquipment =
+  db.prepare(`
+    INSERT OR IGNORE INTO equipment (
+
+      code,
+
+      name,
+
+      category,
+
+      department,
+
+      serial_number,
+
+      status,
+
+      notes
+
+    )
+
+    VALUES (
+
+      ?, ?, ?, 'IT', ?, 'available', ?
+
+    )
+  `);
+
+
+/*
+====================================================
+LOAD IT INVENTORY
 ====================================================
 */
 
 for (
   const equipment
-  of postProductionEquipment
+  of itEquipment
 ) {
 
-  insertEquipment.run(
+  insertITEquipment.run(
     ...equipment
   );
+
 }
 
 
 console.log(
-  `✅ Post Production inventory checked: ${postProductionEquipment.length} items.`
+  `✅ IT inventory checked: ${itEquipment.length} items.`
 );
 
 
