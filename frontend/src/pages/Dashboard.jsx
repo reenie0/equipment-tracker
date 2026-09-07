@@ -283,40 +283,58 @@ export default function Dashboard() {
             PAGE HEADER
             ========================================== */}
 
-        <div className="page-header">
+ <div className="page-header">
 
-          <div>
+  <div>
 
-            <p className="eyebrow">
-              Equipment Yard
-            </p>
+    <p className="eyebrow">
+      Equipment Yard
+    </p>
 
-            <h1 className="page-title">
-              Equipment
-            </h1>
+    <h1 className="page-title">
+      Equipment
+    </h1>
 
-            <p className="page-sub">
-              Green means ready to go,
-              amber means it's out on a job,
-              red means it's in repair,
-              and grey means it's out of service.
-            </p>
+    <p className="page-sub">
+      Green means ready to go,
+      amber means it's out on a job,
+      red means it's in repair,
+      and grey means it's out of service.
+    </p>
 
-          </div>
+  </div>
 
-          {isManager && (
-            <button
-              className="btn btn-primary"
-              onClick={() =>
-                setAddOpen(true)
-              }
-            >
-              + Add equipment
-            </button>
-          )}
+  {isManager && (
+    <div
+      style={{
+        display: "flex",
+        gap: 10,
+        flexWrap: "wrap"
+      }}
+    >
 
-        </div>
+      <button
+        className="btn"
+        onClick={() =>
+          window.location.href = "/reports"
+        }
+      >
+        📊 Reports
+      </button>
 
+      <button
+        className="btn btn-primary"
+        onClick={() =>
+          setAddOpen(true)
+        }
+      >
+        + Add equipment
+      </button>
+
+    </div>
+  )}
+
+</div>
 
         {/* ==========================================
             DEPARTMENT FILTER
