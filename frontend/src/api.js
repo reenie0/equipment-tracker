@@ -248,11 +248,13 @@ export const api = {
     }),
 
   returnBooking: (
+  token,
+  id,
+  payload
+) =>
+  request(`/bookings/${id}/return`, {
+    method: "POST",
+    body: payload,
     token,
-    id
-  ) =>
-    request(`/bookings/${id}/return`, {
-      method: "POST",
-      token,
-    }),
+  }),
 };
