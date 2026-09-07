@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Requests from "./pages/Requests";
 import ManagerReview from "./pages/ManagerReview";
 import Users from "./pages/Users";
+import Reports from "./pages/Reports";
 
 /*
 ====================================================
@@ -152,6 +153,11 @@ export default function App() {
           path="*"
           element={<Navigate to="/" replace />}
         />
+
+        <Route
+  path="/reports"
+  element={<Reports />}
+/>
 
       </Routes>
 
