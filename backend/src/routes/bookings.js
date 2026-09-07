@@ -375,16 +375,48 @@ RETURN EQUIPMENT
 
 Manager OR Super User only.
 
-Staff can no longer self-return equipment — a
-manager or super user must be the one to mark a
-booking returned.
+The manager records what state the equipment came
+back in — available, needs repair, or damaged/out
+of service — plus an optional note (required unless
+the equipment came back fine). That status becomes
+the equipment's new status.
 ====================================================
 */
+
+const RETURN_STATUSES = [
+  "available",
+  "repair",
+  "out_of_service"
+];
 
 router.post(
   "/:id/return",
   requireManager,
   (req, res) => {
+
+    const {
+      status,
+      note: rawNote
+    } = req.body || {};
+
+    const note = typeof rawNote === "string" ? rawNote.trim() : "";
+
+    if (!RETURN_STATUSES.includes(status)) {
+      return res.status(400).json({
+        error:
+          "Please choose the equipment's condition: available, repair, or out_of_service"
+      });
+    }
+
+    if (
+      (status === "repair" || status === "out_of_service") &&
+      !note
+    ) {
+      return res.status(400).json({
+        error:
+          "Please add a note describing what's wrong with the equipment"
+      });
+    }
 
     const booking = db
       .prepare(
@@ -407,15 +439,24 @@ router.post(
 
     db.prepare(`
       UPDATE bookings
-      SET status = 'completed'
+      SET
+        status = 'completed',
+        return_status = ?,
+        return_note = ?,
+        returned_at = ?
       WHERE id = ?
-    `).run(booking.id);
+    `).run(
+      status,
+      note || null,
+      new Date().toISOString(),
+      booking.id
+    );
 
     db.prepare(`
       UPDATE equipment
-      SET status = 'available'
+      SET status = ?
       WHERE id = ?
-    `).run(booking.equipment_id);
+    `).run(status, booking.equipment_id);
 
     res.json({
       booking: fullBooking(
