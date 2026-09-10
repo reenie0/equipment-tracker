@@ -15,7 +15,7 @@ export default function Navbar() {
 
         {/* BRAND */}
         <div className="brand">
-          <span className="brand-mark">EQ</span>
+          <img src="/logo.png" alt="Company logo" className="brand-logo" />
           Equipment Tracker
         </div>
 
