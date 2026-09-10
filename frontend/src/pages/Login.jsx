@@ -399,6 +399,8 @@ export default function Login() {
       <div className="auth-wrap">
         <div className="auth-card">
 
+          <img src="/logo.png" alt="Company logo" className="auth-logo" />
+
           <p className="eyebrow">
             Equipment Tracker
           </p>
@@ -619,6 +621,8 @@ export default function Login() {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
+
+        <img src="/logo.png" alt="Company logo" className="auth-logo" />
 
         <p className="eyebrow">
           Equipment Tracker
