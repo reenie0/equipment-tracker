@@ -1,3 +1,4 @@
+
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 
@@ -18,10 +19,12 @@ PROTECTED ROUTE
 function Protected({ children }) {
   const { token, mustChangePassword } = useAuth();
 
+  // Not logged in
   if (!token) {
     return <Navigate to="/login" replace />;
   }
 
+  // User must change password
   if (mustChangePassword) {
     return <Navigate to="/login" replace />;
   }
@@ -44,7 +47,11 @@ function ManagerOnly({ children }) {
     return <Navigate to="/login" replace />;
   }
 
-  return isManager ? children : <Navigate to="/" replace />;
+  return isManager ? (
+    children
+  ) : (
+    <Navigate to="/" replace />
+  );
 }
 
 /*
@@ -56,21 +63,18 @@ Only Super Users can access User Management.
 */
 
 function SuperUserOnly({ children }) {
-  const {
-    user,
-    mustChangePassword
-  } = useAuth();
+  const { user, mustChangePassword } = useAuth();
 
   if (mustChangePassword) {
     return <Navigate to="/login" replace />;
   }
 
-  return user?.role === "superuser"
-    ? children
-    : <Navigate to="/" replace />;
+  return user?.role === "superuser" ? (
+    children
+  ) : (
+    <Navigate to="/" replace />
+  );
 }
-
-
 
 /*
 ====================================================
@@ -79,32 +83,37 @@ APP
 */
 
 export default function App() {
-  const {
-    token,
-    mustChangePassword
-  } = useAuth();
+  const { token, mustChangePassword } = useAuth();
 
-  const showNavbar =
-    token && !mustChangePassword;
+  const isLoggedIn = Boolean(token && !mustChangePassword);
 
   return (
     <div className="app-shell">
 
-      {showNavbar && <Navbar />}
+      {/* Show navigation only after login */}
+      {isLoggedIn && <Navbar />}
 
       <Routes>
 
-        {/* LOGIN */}
+        {/* ====================================================
+            LOGIN
+            ==================================================== */}
+
         <Route
           path="/login"
           element={
-            token && !mustChangePassword
-              ? <Navigate to="/" replace />
-              : <Login />
+            isLoggedIn ? (
+              <Navigate to="/" replace />
+            ) : (
+              <Login />
+            )
           }
         />
 
-        {/* EQUIPMENT */}
+        {/* ====================================================
+            DASHBOARD / EQUIPMENT
+            ==================================================== */}
+
         <Route
           path="/"
           element={
@@ -114,7 +123,10 @@ export default function App() {
           }
         />
 
-        {/* REQUESTS */}
+        {/* ====================================================
+            REQUESTS
+            ==================================================== */}
+
         <Route
           path="/requests"
           element={
@@ -124,7 +136,10 @@ export default function App() {
           }
         />
 
-        {/* MANAGER REVIEW */}
+        {/* ====================================================
+            MANAGER REVIEW
+            ==================================================== */}
+
         <Route
           path="/manager"
           element={
@@ -136,7 +151,10 @@ export default function App() {
           }
         />
 
-        {/* USER MANAGEMENT */}
+        {/* ====================================================
+            USER MANAGEMENT
+            ==================================================== */}
+
         <Route
           path="/users"
           element={
@@ -148,19 +166,34 @@ export default function App() {
           }
         />
 
-        {/* UNKNOWN ROUTES */}
+        {/* ====================================================
+            REPORTS
+            ==================================================== */}
+
         <Route
-          path="*"
-          element={<Navigate to="/" replace />}
+          path="/reports"
+          element={
+            <Protected>
+              <Reports />
+            </Protected>
+          }
         />
 
+        {/* ====================================================
+            UNKNOWN ROUTES
+            ==================================================== */}
+
         <Route
-  path="/reports"
-  element={<Reports />}
-/>
+          path="*"
+          element={
+            <Navigate
+              to={isLoggedIn ? "/" : "/login"}
+              replace
+            />
+          }
+        />
 
       </Routes>
-
     </div>
   );
 }
