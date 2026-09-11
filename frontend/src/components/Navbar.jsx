@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/Themecontext";
 
 export default function Navbar() {
   const {
@@ -8,6 +9,8 @@ export default function Navbar() {
     isManager,
     isSuperUser
   } = useAuth();
+
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <header className="navbar">
@@ -73,6 +76,15 @@ export default function Navbar() {
 
         {/* USER */}
         <div className="nav-user">
+
+          <button
+            className="theme-toggle"
+            onClick={toggleTheme}
+            aria-label="Toggle light/dark theme"
+            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+          >
+            {theme === "light" ? "🌙" : "☀️"}
+          </button>
 
           <span>
             {user?.name}
