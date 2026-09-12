@@ -179,7 +179,9 @@ if (!tableExists("users")) {
 
       id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-      name TEXT NOT NULL,
+      first_name TEXT NOT NULL,
+
+      last_name TEXT NOT NULL,
 
       username TEXT UNIQUE NOT NULL,
 
@@ -336,6 +338,143 @@ else {
 
   /*
   ==================================================
+  SPLIT name INTO first_name / last_name
+  ==================================================
+
+  Older databases store a single "name" column.
+  We add first_name/last_name (each NOT NULL with
+  a temporary '' default, which SQLite allows even
+  on a populated table), backfill them by splitting
+  the old name on the first space, then drop the
+  old column. SQLite 3.35+ (bundled by better-sqlite3)
+  supports DROP COLUMN directly, so no full table
+  rebuild is needed for this one.
+  ==================================================
+  */
+
+  const hasOldNameColumn =
+    usersColumns.some(
+      column => column.name === "name"
+    );
+
+  const hasFirstName =
+    usersColumns.some(
+      column => column.name === "first_name"
+    );
+
+  const hasLastName =
+    usersColumns.some(
+      column => column.name === "last_name"
+    );
+
+  if (!hasFirstName) {
+
+    console.log(
+      "🔄 Adding users.first_name..."
+    );
+
+    db.exec(`
+      ALTER TABLE users
+      ADD COLUMN first_name TEXT
+      NOT NULL
+      DEFAULT ''
+    `);
+
+    console.log(
+      "✅ users.first_name added."
+    );
+  }
+
+  if (!hasLastName) {
+
+    console.log(
+      "🔄 Adding users.last_name..."
+    );
+
+    db.exec(`
+      ALTER TABLE users
+      ADD COLUMN last_name TEXT
+      NOT NULL
+      DEFAULT ''
+    `);
+
+    console.log(
+      "✅ users.last_name added."
+    );
+  }
+
+  if (
+    hasOldNameColumn &&
+    (!hasFirstName || !hasLastName)
+  ) {
+
+    console.log(
+      "🔄 Backfilling first_name/last_name from name..."
+    );
+
+    db.exec(`
+      UPDATE users
+      SET
+        first_name = CASE
+          WHEN first_name = ''
+            AND name IS NOT NULL
+            AND TRIM(name) != ''
+            THEN CASE
+              WHEN instr(TRIM(name), ' ') > 0
+                THEN substr(
+                  TRIM(name),
+                  1,
+                  instr(TRIM(name), ' ') - 1
+                )
+              ELSE TRIM(name)
+            END
+          ELSE first_name
+        END,
+
+        last_name = CASE
+          WHEN last_name = ''
+            AND name IS NOT NULL
+            AND TRIM(name) != ''
+            THEN CASE
+              WHEN instr(TRIM(name), ' ') > 0
+                THEN TRIM(
+                  substr(
+                    TRIM(name),
+                    instr(TRIM(name), ' ') + 1
+                  )
+                )
+              ELSE ''
+            END
+          ELSE last_name
+        END
+
+      WHERE name IS NOT NULL;
+    `);
+
+    console.log(
+      "✅ first_name/last_name backfilled."
+    );
+  }
+
+  if (hasOldNameColumn) {
+
+    console.log(
+      "🔄 Dropping legacy users.name column..."
+    );
+
+    db.exec(`
+      ALTER TABLE users
+      DROP COLUMN name;
+    `);
+
+    console.log(
+      "✅ users.name dropped."
+    );
+  }
+
+
+  /*
+  ==================================================
   REBUILD USERS TABLE IF THE DEPARTMENT CHECK
   IS OLD OR MISSING
   ==================================================
@@ -371,7 +510,9 @@ else {
 
         id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-        name TEXT NOT NULL,
+        first_name TEXT NOT NULL,
+
+        last_name TEXT NOT NULL,
 
         username TEXT UNIQUE NOT NULL,
 
@@ -580,7 +721,9 @@ else {
 
         id,
 
-        name,
+        first_name,
+
+        last_name,
 
         username,
 
@@ -602,7 +745,9 @@ else {
 
         id,
 
-        name,
+        first_name,
+
+        last_name,
 
         username,
 
@@ -1061,6 +1206,13 @@ return_status has no CHECK constraint at the ALTER
 TABLE level — validation happens in bookings.js
 instead. That means adding another allowed status
 later never requires rebuilding this table.
+
+NOTE: requester_name is left as-is (a plain text
+snapshot of the requester's full name at booking
+time). Wherever bookings.js builds this string from
+req.user.name, update it to
+`${req.user.first_name} ${req.user.last_name}` —
+see the note at the bottom of this migration file.
 ====================================================
 */
 
@@ -1196,7 +1348,9 @@ if (userCount === 0) {
     db.prepare(`
       INSERT INTO users (
 
-        name,
+        first_name,
+
+        last_name,
 
         username,
 
@@ -1212,7 +1366,7 @@ if (userCount === 0) {
 
       )
 
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
 
@@ -1223,7 +1377,8 @@ if (userCount === 0) {
   */
 
   insertUser.run(
-    "System Administrator",
+    "System",
+    "Administrator",
     "superadmin",
     bcrypt.hashSync(
       "admin123",
@@ -1243,7 +1398,8 @@ if (userCount === 0) {
   */
 
   insertUser.run(
-    "Site Manager",
+    "Site",
+    "Manager",
     "manager",
     bcrypt.hashSync(
       "manager123",
@@ -1263,7 +1419,8 @@ if (userCount === 0) {
   */
 
   insertUser.run(
-    "Demo User",
+    "Demo",
+    "User",
     "user",
     bcrypt.hashSync(
       "user123",
