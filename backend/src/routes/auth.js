@@ -1,4 +1,3 @@
-
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -20,12 +19,19 @@ VALIDATION LIMITS
 
 const MIN_PASSWORD_LENGTH = 6;
 const MAX_PASSWORD_LENGTH = 72;
-const MAX_NAME_LENGTH = 100;
+const MAX_FIRST_NAME_LENGTH = 50;
+const MAX_LAST_NAME_LENGTH = 50;
 const MAX_USERNAME_LENGTH = 30;
 
 /*
 ====================================================
 CREATE JWT
+====================================================
+
+"name" is kept in the payload as a computed
+first + last convenience field so any code that
+still reads req.user.name (e.g. bookings.js)
+keeps working without changes.
 ====================================================
 */
 
@@ -33,7 +39,9 @@ function signToken(user) {
   return jwt.sign(
     {
       id: user.id,
-      name: user.name,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      name: `${user.first_name} ${user.last_name}`,
       username: user.username,
       role: user.role,
       must_change_password: Boolean(
@@ -56,7 +64,9 @@ FORMAT USER
 function formatUser(user) {
   return {
     id: user.id,
-    name: user.name,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    name: `${user.first_name} ${user.last_name}`,
     username: user.username,
     role: user.role,
     active: Boolean(user.active),
@@ -84,7 +94,8 @@ managed accounts.
 
 router.post("/register", (req, res) => {
   const {
-    name,
+    first_name,
+    last_name,
     username,
     password
   } = req.body || {};
@@ -95,10 +106,15 @@ router.post("/register", (req, res) => {
   --------------------------------------------------
   */
 
-  if (!name || !username || !password) {
+  if (
+    !first_name ||
+    !last_name ||
+    !username ||
+    !password
+  ) {
     return res.status(400).json({
       error:
-        "Name, username, and password are required"
+        "First name, last name, username, and password are required"
     });
   }
 
@@ -108,12 +124,19 @@ router.post("/register", (req, res) => {
   --------------------------------------------------
   */
 
-  const cleanName = name.trim();
+  const cleanFirstName = first_name.trim();
+  const cleanLastName = last_name.trim();
   const cleanUsername = username.trim();
 
-  if (!cleanName) {
+  if (!cleanFirstName) {
     return res.status(400).json({
-      error: "Name cannot be empty"
+      error: "First name cannot be empty"
+    });
+  }
+
+  if (!cleanLastName) {
+    return res.status(400).json({
+      error: "Last name cannot be empty"
     });
   }
 
@@ -129,10 +152,17 @@ router.post("/register", (req, res) => {
   --------------------------------------------------
   */
 
-  if (cleanName.length > MAX_NAME_LENGTH) {
+  if (cleanFirstName.length > MAX_FIRST_NAME_LENGTH) {
     return res.status(400).json({
       error:
-        `Name must not exceed ${MAX_NAME_LENGTH} characters`
+        `First name must not exceed ${MAX_FIRST_NAME_LENGTH} characters`
+    });
+  }
+
+  if (cleanLastName.length > MAX_LAST_NAME_LENGTH) {
+    return res.status(400).json({
+      error:
+        `Last name must not exceed ${MAX_LAST_NAME_LENGTH} characters`
     });
   }
 
@@ -217,17 +247,19 @@ router.post("/register", (req, res) => {
   const info = db
     .prepare(`
       INSERT INTO users (
-        name,
+        first_name,
+        last_name,
         username,
         password_hash,
         role,
         active,
         must_change_password
       )
-      VALUES (?, ?, ?, 'staff', 1, 0)
+      VALUES (?, ?, ?, ?, 'staff', 1, 0)
     `)
     .run(
-      cleanName,
+      cleanFirstName,
+      cleanLastName,
       cleanUsername,
       hash
     );
@@ -409,7 +441,8 @@ router.get(
       .prepare(`
         SELECT
           id,
-          name,
+          first_name,
+          last_name,
           username,
           role,
           active,
@@ -679,4 +712,3 @@ EXPORT
 */
 
 module.exports = router;
-
