@@ -1,4 +1,3 @@
-
 import {
   createContext,
   useContext,
@@ -76,17 +75,37 @@ export function AuthProvider({ children }) {
   ====================================================
   REGISTER
   ====================================================
+
+  NOTE: this now takes firstName/lastName instead of
+  a single name. api.register's signature needs to
+  match — see the comment near its definition in
+  api.js:
+
+    register: (firstName, lastName, username, password, department) =>
+      request("/auth/register", {
+        method: "POST",
+        body: {
+          first_name: firstName,
+          last_name: lastName,
+          username,
+          password,
+          department
+        }
+      })
+  ====================================================
   */
 
   const register = async (
-    name,
+    firstName,
+    lastName,
     username,
     password,
     department
   ) => {
 
     const data = await api.register(
-      name,
+      firstName,
+      lastName,
       username,
       password,
       department
