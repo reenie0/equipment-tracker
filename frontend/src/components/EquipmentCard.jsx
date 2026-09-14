@@ -5,13 +5,16 @@ export default function EquipmentCard({
   isManager,
   onBook,
   onDelete,
-  onSetStatus
+  onSetStatus,
+  onEdit,
 }) {
   return (
     <div
       className="eq-card"
       style={{
-        "--status-color": `var(--${statusVar(item.status)})`
+        "--status-color": `var(--${statusVar(
+          item.status
+        )})`,
       }}
     >
 
@@ -23,19 +26,13 @@ export default function EquipmentCard({
 
         <div>
 
-          {/* EQUIPMENT CODE */}
-
           <div className="eq-code">
             {item.code}
           </div>
 
-          {/* EQUIPMENT NAME */}
-
           <h3 className="eq-name">
             {item.name}
           </h3>
-
-          {/* CATEGORY */}
 
           <div className="eq-category">
             {item.category}
@@ -43,49 +40,49 @@ export default function EquipmentCard({
 
         </div>
 
-        {/* STATUS */}
-
-        <StatusPill status={item.status} />
+        <StatusPill
+          status={item.status}
+        />
 
       </div>
 
 
       {/* ==================================================
-    EQUIPMENT INFORMATION
-    ================================================== */}
+          EQUIPMENT INFORMATION
+          ================================================== */}
 
-<div className="eq-details">
+      <div className="eq-details">
 
-  {/* DEPARTMENT */}
+        <div className="eq-detail">
 
-  <div className="eq-detail">
+          <span className="eq-detail-label">
+            Department
+          </span>
 
-    <span className="eq-detail-label">
-      Department
-    </span>
+          <span className="eq-detail-value">
+            {item.department ||
+              "Not assigned"}
+          </span>
 
-    <span className="eq-detail-value">
-      {item.department || "Not assigned"}
-    </span>
-
-  </div>
+        </div>
 
 
-  {/* SERIAL NUMBER */}
+        <div className="eq-detail">
 
-  <div className="eq-detail">
+          <span className="eq-detail-label">
+            Serial Number
+          </span>
 
-    <span className="eq-detail-label">
-      Serial Number
-    </span>
+          <span className="eq-detail-value">
+            {item.serial_number ||
+              "Not assigned"}
+          </span>
 
-    <span className="eq-detail-value">
-      {item.serial_number || "Not assigned"}
-    </span>
+        </div>
 
-  </div>
+      </div>
 
-</div>
+
       {/* ==================================================
           STAFF ACTIONS
           ================================================== */}
@@ -98,9 +95,12 @@ export default function EquipmentCard({
             disabled={
               item.status !== "available"
             }
-            onClick={() => onBook(item)}
+            onClick={() =>
+              onBook(item)
+            }
           >
-            {item.status === "available"
+            {item.status ===
+            "available"
               ? "Request booking"
               : "Not available"}
           </button>
@@ -116,12 +116,25 @@ export default function EquipmentCard({
       {isManager && (
         <div className="eq-manager-row">
 
+          {/* EDIT */}
+
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() =>
+              onEdit(item)
+            }
+          >
+            Edit
+          </button>
+
+
           {/* MARK AVAILABLE */}
 
           <button
             className="btn btn-ghost btn-sm"
             disabled={
-              item.status === "available"
+              item.status ===
+              "available"
             }
             onClick={() =>
               onSetStatus(
