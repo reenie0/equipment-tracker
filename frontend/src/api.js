@@ -41,7 +41,6 @@ async function request(
 }
 
 export const api = {
-
   // ==================================================
   // AUTH
   // ==================================================
@@ -58,7 +57,8 @@ export const api = {
   register: (
     name,
     username,
-    password
+    password,
+    department
   ) =>
     request("/auth/register", {
       method: "POST",
@@ -66,6 +66,7 @@ export const api = {
         name,
         username,
         password,
+        department,
       },
     }),
 
@@ -110,6 +111,17 @@ export const api = {
   ) =>
     request("/users", {
       method: "POST",
+      body: payload,
+      token,
+    }),
+
+  updateUser: (
+    token,
+    id,
+    payload
+  ) =>
+    request(`/users/${id}`, {
+      method: "PATCH",
       body: payload,
       token,
     }),
@@ -175,6 +187,17 @@ export const api = {
   ) =>
     request("/equipment", {
       method: "POST",
+      body: payload,
+      token,
+    }),
+
+  updateEquipment: (
+    token,
+    id,
+    payload
+  ) =>
+    request(`/equipment/${id}`, {
+      method: "PATCH",
       body: payload,
       token,
     }),
@@ -248,13 +271,13 @@ export const api = {
     }),
 
   returnBooking: (
-  token,
-  id,
-  payload
-) =>
-  request(`/bookings/${id}/return`, {
-    method: "POST",
-    body: payload,
     token,
-  }),
+    id,
+    payload
+  ) =>
+    request(`/bookings/${id}/return`, {
+      method: "POST",
+      body: payload,
+      token,
+    }),
 };
