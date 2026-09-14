@@ -5,658 +5,882 @@ const db = require("../db");
 
 const {
   requireAuth,
-  requireSuperUser
+  requireSuperUser,
 } = require("../middleware/auth");
 
 const router = express.Router();
 
-/*
-====================================================
-ALL USER MANAGEMENT ROUTES REQUIRE:
-1. LOGIN
-2. SUPER USER ROLE
-====================================================
-*/
+
+/* ==================================================
+   USER DEPARTMENTS
+
+   These are the ONLY departments allowed
+   for users.
+   ================================================== */
+
+const ALLOWED_DEPARTMENTS = [
+  "Post Production",
+  "Production",
+  "Transmission",
+  "IT",
+  "Newsroom Creatives",
+  "Admin",
+  "Social Media",
+  "Security",
+  "Programming",
+];
+
+
+/* ==================================================
+   ROUTER SECURITY
+
+   Everything in this route requires authentication
+   and superuser privileges.
+   ================================================== */
 
 router.use(requireAuth);
 router.use(requireSuperUser);
 
-/*
-====================================================
-ALLOWED DEPARTMENTS
-====================================================
-*/
 
-const ALLOWED_DEPARTMENTS = [
-  "post production",
-  "production",
-  "transmission",
-  "IT",
-  "newsroom creatives",
-  "admin",
-  "social media",
-  "security",
-  "programming"
-];
-
-/*
-====================================================
-ALLOWED ROLES
-====================================================
-*/
-
-const ALLOWED_ROLES = [
-  "staff",
-  "manager",
-  "superuser"
-];
-
-/*
-====================================================
-GET ALL USERS
-====================================================
-*/
+/* ==================================================
+   GET ALL USERS
+   ================================================== */
 
 router.get("/", (req, res) => {
 
-  const users = db
-    .prepare(`
-      SELECT
-        id,
-        name,
-        username,
-        role,
-        department,
-        active,
-        must_change_password,
-        created_at
-      FROM users
-      ORDER BY created_at DESC
-    `)
-    .all();
+  try {
 
-  res.json({
-    users
-  });
+    const users = db
+      .prepare(`
+        SELECT
+          id,
+          first_name,
+          last_name,
+          username,
+          role,
+          department,
+          active,
+          must_change_password,
+          created_at
+        FROM users
+        ORDER BY created_at DESC
+      `)
+      .all();
+
+    return res.json({
+      users,
+    });
+
+  } catch (err) {
+
+    console.error(
+      "List users error:",
+      err
+    );
+
+    return res.status(500).json({
+      error:
+        "Unable to load users.",
+    });
+  }
 });
 
-/*
-====================================================
-GET ONE USER
-====================================================
-*/
+
+/* ==================================================
+   GET ONE USER
+   ================================================== */
 
 router.get("/:id", (req, res) => {
 
-  const user = db
-    .prepare(`
-      SELECT
-        id,
-        name,
-        username,
-        role,
-        department,
-        active,
-        must_change_password,
-        created_at
-      FROM users
-      WHERE id = ?
-    `)
-    .get(req.params.id);
+  try {
 
-  if (!user) {
-    return res.status(404).json({
-      error: "User not found"
+    const user =
+      db
+        .prepare(`
+          SELECT
+            id,
+            first_name,
+            last_name,
+            username,
+            role,
+            department,
+            active,
+            must_change_password,
+            created_at
+          FROM users
+          WHERE id = ?
+        `)
+        .get(req.params.id);
+
+    if (!user) {
+
+      return res.status(404).json({
+        error:
+          "User not found.",
+      });
+    }
+
+    return res.json({
+      user,
+    });
+
+  } catch (err) {
+
+    console.error(
+      "Get user error:",
+      err
+    );
+
+    return res.status(500).json({
+      error:
+        "Unable to load user.",
     });
   }
-
-  res.json({
-    user
-  });
 });
 
-/*
-====================================================
-CREATE USER
-====================================================
 
-Only Super Users can create accounts.
+/* ==================================================
+   CREATE USER
 
-Every newly created account receives:
-
-diamond01
-
-The user must change this password
-when they first log in.
-====================================================
-*/
+   New users receive a temporary password.
+   They must change it at first login.
+   ================================================== */
 
 router.post("/", (req, res) => {
 
   const {
-    name,
+    first_name,
+    last_name,
     username,
-    role,
-    department
-  } = req.body || {};
+    role = "staff",
+    department,
+  } = req.body;
 
-  /*
-  ==================================================
-  VALIDATION
-  ==================================================
-  */
 
-  if (!name || !username || !department) {
+  if (!first_name?.trim()) {
+
     return res.status(400).json({
       error:
-        "Name, username, and department are required"
+        "First name is required.",
     });
   }
 
-  const trimmedName = name.trim();
-  const trimmedUsername = username.trim();
 
-  /*
-  ==================================================
-  CHECK DEPARTMENT
-  ==================================================
-  */
+  if (!last_name?.trim()) {
 
-  if (!ALLOWED_DEPARTMENTS.includes(department)) {
     return res.status(400).json({
       error:
-        "Invalid department"
+        "Last name is required.",
     });
   }
 
-  /*
-  ==================================================
-  CHECK ROLE
-  ==================================================
-  */
 
-  const selectedRole = role || "staff";
+  if (!username?.trim()) {
 
-  if (!ALLOWED_ROLES.includes(selectedRole)) {
     return res.status(400).json({
       error:
-        "Role must be staff, manager, or superuser"
+        "Username is required.",
     });
   }
 
-  /*
-  ==================================================
-  CHECK USERNAME
-  ==================================================
-  */
 
-  const existing = db
-    .prepare(`
-      SELECT id
-      FROM users
-      WHERE username = ?
-    `)
-    .get(trimmedUsername);
+  if (!department) {
 
-  if (existing) {
-    return res.status(409).json({
+    return res.status(400).json({
       error:
-        "That username is already taken"
+        "Department is required.",
     });
   }
 
-  /*
-  ==================================================
-  DEFAULT PASSWORD
-  ==================================================
-  */
 
-  const DEFAULT_PASSWORD = "diamond01";
-
-  const passwordHash =
-    bcrypt.hashSync(
-      DEFAULT_PASSWORD,
-      10
-    );
-
-  /*
-  ==================================================
-  CREATE USER
-  ==================================================
-  */
-
-  const info = db
-    .prepare(`
-      INSERT INTO users (
-        name,
-        username,
-        password_hash,
-        role,
-        department,
-        active,
-        must_change_password
-      )
-      VALUES (?, ?, ?, ?, ?, 1, 1)
-    `)
-    .run(
-      trimmedName,
-      trimmedUsername,
-      passwordHash,
-      selectedRole,
+  if (
+    !ALLOWED_DEPARTMENTS.includes(
       department
+    )
+  ) {
+
+    return res.status(400).json({
+      error:
+        "Invalid department.",
+    });
+  }
+
+
+  const allowedRoles = [
+    "staff",
+    "manager",
+    "superuser",
+  ];
+
+
+  if (
+    !allowedRoles.includes(
+      role
+    )
+  ) {
+
+    return res.status(400).json({
+      error:
+        "Invalid role.",
+    });
+  }
+
+
+  try {
+
+    const existing =
+      db
+        .prepare(`
+          SELECT id
+          FROM users
+          WHERE LOWER(username) = LOWER(?)
+        `)
+        .get(
+          username.trim()
+        );
+
+
+    if (existing) {
+
+      return res.status(409).json({
+        error:
+          "Username already exists.",
+      });
+    }
+
+
+    /*
+    Temporary password.
+    The user must change it at
+    first login.
+    */
+
+    const temporaryPassword =
+      "diamond01";
+
+    const passwordHash =
+      bcrypt.hashSync(
+        temporaryPassword,
+        10
+      );
+
+
+    const result =
+      db
+        .prepare(`
+          INSERT INTO users (
+            first_name,
+            last_name,
+            username,
+            password_hash,
+            role,
+            department,
+            active,
+            must_change_password
+          )
+          VALUES (?, ?, ?, ?, ?, ?, 1, 1)
+        `)
+        .run(
+          first_name.trim(),
+          last_name.trim(),
+          username.trim(),
+          passwordHash,
+          role,
+          department
+        );
+
+
+    const user =
+      db
+        .prepare(`
+          SELECT
+            id,
+            first_name,
+            last_name,
+            username,
+            role,
+            department,
+            active,
+            must_change_password,
+            created_at
+          FROM users
+          WHERE id = ?
+        `)
+        .get(
+          result.lastInsertRowid
+        );
+
+
+    return res.status(201).json({
+      user,
+      temporary_password:
+        temporaryPassword,
+    });
+
+  } catch (err) {
+
+    console.error(
+      "Create user error:",
+      err
     );
 
-  /*
-  ==================================================
-  GET CREATED USER
-  ==================================================
-  */
-
-  const user = db
-    .prepare(`
-      SELECT
-        id,
-        name,
-        username,
-        role,
-        department,
-        active,
-        must_change_password,
-        created_at
-      FROM users
-      WHERE id = ?
-    `)
-    .get(info.lastInsertRowid);
-
-  /*
-  ==================================================
-  RESPONSE
-  ==================================================
-  */
-
-  res.status(201).json({
-    user,
-
-    temporary_password:
-      DEFAULT_PASSWORD,
-
-    message:
-      "User created successfully. The user must change the temporary password when they first log in."
-  });
+    return res.status(500).json({
+      error:
+        "Unable to create user.",
+    });
+  }
 });
 
-/*
-====================================================
-UPDATE USER DETAILS
-====================================================
-*/
+
+/* ==================================================
+   EDIT USER
+
+   Editable fields:
+   - first_name
+   - last_name
+   - username
+   - department
+
+   Password is handled separately.
+   Role is handled separately.
+   Status is handled separately.
+   ================================================== */
 
 router.patch("/:id", (req, res) => {
 
   const {
-    name,
+    first_name,
+    last_name,
     username,
-    department
-  } = req.body || {};
+    department,
+  } = req.body;
 
-  const user = db
-    .prepare(`
-      SELECT *
-      FROM users
-      WHERE id = ?
-    `)
-    .get(req.params.id);
 
-  if (!user) {
-    return res.status(404).json({
-      error: "User not found"
-    });
-  }
+  try {
 
-  if (
-    !name &&
-    !username &&
-    !department
-  ) {
-    return res.status(400).json({
-      error:
-        "Name, username, or department is required"
-    });
-  }
+    const existing =
+      db
+        .prepare(`
+          SELECT *
+          FROM users
+          WHERE id = ?
+        `)
+        .get(
+          req.params.id
+        );
 
-  /*
-  ==================================================
-  VALIDATE DEPARTMENT
-  ==================================================
-  */
 
-  if (
-    department &&
-    !ALLOWED_DEPARTMENTS.includes(department)
-  ) {
-    return res.status(400).json({
-      error:
-        "Invalid department"
-    });
-  }
+    if (!existing) {
 
-  /*
-  ==================================================
-  CHECK USERNAME
-  ==================================================
-  */
+      return res.status(404).json({
+        error:
+          "User not found.",
+      });
+    }
 
-  const newUsername =
-    username
-      ? username.trim()
-      : user.username;
 
-  if (
-    username &&
-    newUsername !== user.username
-  ) {
+    const newFirstName =
+      first_name !== undefined
+        ? first_name.trim()
+        : existing.first_name;
 
-    const existing = db
-      .prepare(`
-        SELECT id
-        FROM users
-        WHERE username = ?
-        AND id != ?
-      `)
-      .get(
-        newUsername,
-        user.id
-      );
 
-    if (existing) {
+    const newLastName =
+      last_name !== undefined
+        ? last_name.trim()
+        : existing.last_name;
+
+
+    const newUsername =
+      username !== undefined
+        ? username.trim()
+        : existing.username;
+
+
+    const newDepartment =
+      department !== undefined
+        ? department
+        : existing.department;
+
+
+    if (!newFirstName) {
+
+      return res.status(400).json({
+        error:
+          "First name is required.",
+      });
+    }
+
+
+    if (!newLastName) {
+
+      return res.status(400).json({
+        error:
+          "Last name is required.",
+      });
+    }
+
+
+    if (!newUsername) {
+
+      return res.status(400).json({
+        error:
+          "Username is required.",
+      });
+    }
+
+
+    if (
+      !newDepartment
+    ) {
+
+      return res.status(400).json({
+        error:
+          "Department is required.",
+      });
+    }
+
+
+    if (
+      !ALLOWED_DEPARTMENTS.includes(
+        newDepartment
+      )
+    ) {
+
+      return res.status(400).json({
+        error:
+          "Invalid department.",
+      });
+    }
+
+
+    /*
+    Make sure another user isn't
+    already using this username.
+    */
+
+    const duplicate =
+      db
+        .prepare(`
+          SELECT id
+          FROM users
+          WHERE LOWER(username) = LOWER(?)
+          AND id != ?
+        `)
+        .get(
+          newUsername,
+          req.params.id
+        );
+
+
+    if (duplicate) {
+
       return res.status(409).json({
         error:
-          "That username is already taken"
+          "Username already exists.",
+      });
+    }
+
+
+    db
+      .prepare(`
+        UPDATE users
+        SET
+          first_name = ?,
+          last_name = ?,
+          username = ?,
+          department = ?
+        WHERE id = ?
+      `)
+      .run(
+        newFirstName,
+        newLastName,
+        newUsername,
+        newDepartment,
+        req.params.id
+      );
+
+
+    const user =
+      db
+        .prepare(`
+          SELECT
+            id,
+            first_name,
+            last_name,
+            username,
+            role,
+            department,
+            active,
+            must_change_password,
+            created_at
+          FROM users
+          WHERE id = ?
+        `)
+        .get(
+          req.params.id
+        );
+
+
+    return res.json({
+      user,
+    });
+
+  } catch (err) {
+
+    console.error(
+      "Update user error:",
+      err
+    );
+
+    return res.status(500).json({
+      error:
+        "Unable to update user.",
+    });
+  }
+});
+
+
+/* ==================================================
+   CHANGE USER ROLE
+   ================================================== */
+
+router.patch(
+  "/:id/role",
+  (req, res) => {
+
+    const {
+      role,
+    } = req.body;
+
+
+    const allowedRoles = [
+      "staff",
+      "manager",
+      "superuser",
+    ];
+
+
+    if (
+      !allowedRoles.includes(
+        role
+      )
+    ) {
+
+      return res.status(400).json({
+        error:
+          "Invalid role.",
+      });
+    }
+
+
+    /*
+    Prevent a superuser from
+    removing their own superuser
+    privileges.
+    */
+
+    if (
+      String(req.user.id) ===
+        String(req.params.id) &&
+      role !== "superuser"
+    ) {
+
+      return res.status(400).json({
+        error:
+          "You cannot remove your own superuser role.",
+      });
+    }
+
+
+    try {
+
+      const existing =
+        db
+          .prepare(`
+            SELECT id
+            FROM users
+            WHERE id = ?
+          `)
+          .get(
+            req.params.id
+          );
+
+
+      if (!existing) {
+
+        return res.status(404).json({
+          error:
+            "User not found.",
+        });
+      }
+
+
+      db
+        .prepare(`
+          UPDATE users
+          SET role = ?
+          WHERE id = ?
+        `)
+        .run(
+          role,
+          req.params.id
+        );
+
+
+      const user =
+        db
+          .prepare(`
+            SELECT
+              id,
+              first_name,
+              last_name,
+              username,
+              role,
+              department,
+              active,
+              must_change_password,
+              created_at
+            FROM users
+            WHERE id = ?
+          `)
+          .get(
+            req.params.id
+          );
+
+
+      return res.json({
+        user,
+      });
+
+    } catch (err) {
+
+      console.error(
+        "Change role error:",
+        err
+      );
+
+      return res.status(500).json({
+        error:
+          "Unable to update user role.",
       });
     }
   }
+);
 
-  /*
-  ==================================================
-  UPDATE
-  ==================================================
-  */
 
-  db.prepare(`
-    UPDATE users
-    SET
-      name = ?,
-      username = ?,
-      department = ?
-    WHERE id = ?
-  `).run(
-    name
-      ? name.trim()
-      : user.name,
+/* ==================================================
+   ACTIVATE / DEACTIVATE USER
+   ================================================== */
 
-    newUsername,
+router.patch(
+  "/:id/status",
+  (req, res) => {
 
-    department ||
-      user.department,
+    const {
+      active,
+    } = req.body;
 
-    user.id
-  );
 
-  /*
-  ==================================================
-  GET UPDATED USER
-  ==================================================
-  */
+    if (
+      typeof active !==
+      "boolean"
+    ) {
 
-  const updatedUser = db
-    .prepare(`
-      SELECT
-        id,
-        name,
-        username,
-        role,
-        department,
-        active,
-        must_change_password,
-        created_at
-      FROM users
-      WHERE id = ?
-    `)
-    .get(user.id);
+      return res.status(400).json({
+        error:
+          "Active status must be true or false.",
+      });
+    }
 
-  res.json({
-    user: updatedUser
-  });
-});
 
-/*
-====================================================
-CHANGE USER ROLE
-====================================================
-*/
+    /*
+    Prevent a superuser from
+    deactivating themselves.
+    */
 
-router.patch("/:id/role", (req, res) => {
+    if (
+      String(req.user.id) ===
+        String(req.params.id) &&
+      active === false
+    ) {
 
-  const {
-    role
-  } = req.body || {};
+      return res.status(400).json({
+        error:
+          "You cannot deactivate your own account.",
+      });
+    }
 
-  if (!ALLOWED_ROLES.includes(role)) {
-    return res.status(400).json({
-      error:
-        "Role must be staff, manager, or superuser"
-    });
+
+    try {
+
+      const existing =
+        db
+          .prepare(`
+            SELECT id
+            FROM users
+            WHERE id = ?
+          `)
+          .get(
+            req.params.id
+          );
+
+
+      if (!existing) {
+
+        return res.status(404).json({
+          error:
+            "User not found.",
+        });
+      }
+
+
+      db
+        .prepare(`
+          UPDATE users
+          SET active = ?
+          WHERE id = ?
+        `)
+        .run(
+          active ? 1 : 0,
+          req.params.id
+        );
+
+
+      const user =
+        db
+          .prepare(`
+            SELECT
+              id,
+              first_name,
+              last_name,
+              username,
+              role,
+              department,
+              active,
+              must_change_password,
+              created_at
+            FROM users
+            WHERE id = ?
+          `)
+          .get(
+            req.params.id
+          );
+
+
+      return res.json({
+        user,
+      });
+
+    } catch (err) {
+
+      console.error(
+        "Change status error:",
+        err
+      );
+
+      return res.status(500).json({
+        error:
+          "Unable to update user status.",
+      });
+    }
   }
+);
 
-  const user = db
-    .prepare(`
-      SELECT *
-      FROM users
-      WHERE id = ?
-    `)
-    .get(req.params.id);
 
-  if (!user) {
-    return res.status(404).json({
-      error: "User not found"
-    });
-  }
+/* ==================================================
+   RESET USER PASSWORD
+   ==================================================
 
-  /*
-  Prevent Super User from removing
-  their own Super User permissions.
-  */
+   Superuser chooses a new password.
+   User must change it after logging in.
+   ================================================== */
 
-  if (
-    user.id === req.user.id &&
-    role !== "superuser"
-  ) {
-    return res.status(400).json({
-      error:
-        "You cannot remove your own Super User role"
-    });
-  }
+router.patch(
+  "/:id/password",
+  (req, res) => {
 
-  db.prepare(`
-    UPDATE users
-    SET role = ?
-    WHERE id = ?
-  `).run(
-    role,
-    user.id
-  );
-
-  const updatedUser = db
-    .prepare(`
-      SELECT
-        id,
-        name,
-        username,
-        role,
-        department,
-        active,
-        must_change_password,
-        created_at
-      FROM users
-      WHERE id = ?
-    `)
-    .get(user.id);
-
-  res.json({
-    user: updatedUser
-  });
-});
-
-/*
-====================================================
-ACTIVATE / DEACTIVATE USER
-====================================================
-*/
-
-router.patch("/:id/status", (req, res) => {
-
-  const {
-    active
-  } = req.body || {};
-
-  if (
-    active !== true &&
-    active !== false &&
-    active !== 1 &&
-    active !== 0
-  ) {
-    return res.status(400).json({
-      error:
-        "Active must be true or false"
-    });
-  }
-
-  const user = db
-    .prepare(`
-      SELECT *
-      FROM users
-      WHERE id = ?
-    `)
-    .get(req.params.id);
-
-  if (!user) {
-    return res.status(404).json({
-      error: "User not found"
-    });
-  }
-
-  /*
-  Prevent Super User from
-  deactivating their own account.
-  */
-
-  if (
-    user.id === req.user.id &&
-    !Boolean(active)
-  ) {
-    return res.status(400).json({
-      error:
-        "You cannot deactivate your own account"
-    });
-  }
-
-  const activeValue =
-    Boolean(active)
-      ? 1
-      : 0;
-
-  db.prepare(`
-    UPDATE users
-    SET active = ?
-    WHERE id = ?
-  `).run(
-    activeValue,
-    user.id
-  );
-
-  const updatedUser = db
-    .prepare(`
-      SELECT
-        id,
-        name,
-        username,
-        role,
-        department,
-        active,
-        must_change_password,
-        created_at
-      FROM users
-      WHERE id = ?
-    `)
-    .get(user.id);
-
-  res.json({
-    user: updatedUser
-  });
-});
-
-/*
-====================================================
-RESET USER PASSWORD
-====================================================
-*/
-
-router.patch("/:id/password", (req, res) => {
-
-  const {
-    password
-  } = req.body || {};
-
-  if (!password) {
-    return res.status(400).json({
-      error:
-        "New password is required"
-    });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({
-      error:
-        "Password must be at least 6 characters"
-    });
-  }
-
-  const user = db
-    .prepare(`
-      SELECT id
-      FROM users
-      WHERE id = ?
-    `)
-    .get(req.params.id);
-
-  if (!user) {
-    return res.status(404).json({
-      error: "User not found"
-    });
-  }
-
-  const passwordHash =
-    bcrypt.hashSync(
+    const {
       password,
-      10
-    );
+    } = req.body;
 
-  db.prepare(`
-    UPDATE users
-    SET
-      password_hash = ?,
-      must_change_password = 1
-    WHERE id = ?
-  `).run(
-    passwordHash,
-    user.id
-  );
 
-  res.json({
-    success: true,
-    message:
-      "Password reset successfully. The user must change the password when they next log in."
-  });
-});
+    if (
+      !password ||
+      password.length < 6
+    ) {
+
+      return res.status(400).json({
+        error:
+          "Password must be at least 6 characters.",
+      });
+    }
+
+
+    try {
+
+      const existing =
+        db
+          .prepare(`
+            SELECT id
+            FROM users
+            WHERE id = ?
+          `)
+          .get(
+            req.params.id
+          );
+
+
+      if (!existing) {
+
+        return res.status(404).json({
+          error:
+            "User not found.",
+        });
+      }
+
+
+      const passwordHash =
+        bcrypt.hashSync(
+          password,
+          10
+        );
+
+
+      db
+        .prepare(`
+          UPDATE users
+          SET
+            password_hash = ?,
+            must_change_password = 1
+          WHERE id = ?
+        `)
+        .run(
+          passwordHash,
+          req.params.id
+        );
+
+
+      return res.json({
+        success: true,
+        message:
+          "Password reset successfully.",
+      });
+
+    } catch (err) {
+
+      console.error(
+        "Reset password error:",
+        err
+      );
+
+      return res.status(500).json({
+        error:
+          "Unable to reset password.",
+      });
+    }
+  }
+);
+
 
 module.exports = router;
