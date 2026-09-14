@@ -37,7 +37,8 @@ export default function Login() {
 
   const [mode, setMode] = useState("login");
 
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
   const [department, setDepartment] = useState("");
   const [password, setPassword] = useState("");
@@ -78,7 +79,8 @@ export default function Login() {
 
   const MIN_PASSWORD_LENGTH = 6;
   const MAX_PASSWORD_LENGTH = 72;
-  const MAX_NAME_LENGTH = 100;
+  const MAX_FIRST_NAME_LENGTH = 50;
+  const MAX_LAST_NAME_LENGTH = 50;
   const MAX_USERNAME_LENGTH = 30;
 
   /*
@@ -155,20 +157,36 @@ export default function Login() {
   */
 
   const submitRegister = async () => {
-    const trimmedName = name.trim();
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
     const trimmedUsername = username.trim();
 
-    if (!trimmedName) {
-      setError("Please enter your full name.");
+    if (!trimmedFirstName) {
+      setError("Please enter your first name.");
       return;
     }
 
     if (
-      trimmedName.length >
-      MAX_NAME_LENGTH
+      trimmedFirstName.length >
+      MAX_FIRST_NAME_LENGTH
     ) {
       setError(
-        `Full name must not exceed ${MAX_NAME_LENGTH} characters.`
+        `First name must not exceed ${MAX_FIRST_NAME_LENGTH} characters.`
+      );
+      return;
+    }
+
+    if (!trimmedLastName) {
+      setError("Please enter your last name.");
+      return;
+    }
+
+    if (
+      trimmedLastName.length >
+      MAX_LAST_NAME_LENGTH
+    ) {
+      setError(
+        `Last name must not exceed ${MAX_LAST_NAME_LENGTH} characters.`
       );
       return;
     }
@@ -246,7 +264,8 @@ export default function Login() {
     */
 
     await register(
-      trimmedName,
+      trimmedFirstName,
+      trimmedLastName,
       trimmedUsername,
       password,
       department
@@ -649,26 +668,53 @@ export default function Login() {
           )}
 
           {mode === "register" && (
-            <div className="form-field">
+            <div className="form-grid">
 
-              <label>
-                Full name
-              </label>
+              <div className="form-field">
 
-              <input
-                type="text"
-                value={name}
-                onChange={(e) =>
-                  setName(
-                    e.target.value
-                  )
-                }
-                maxLength={
-                  MAX_NAME_LENGTH
-                }
-                required
-                autoComplete="name"
-              />
+                <label>
+                  First name
+                </label>
+
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) =>
+                    setFirstName(
+                      e.target.value
+                    )
+                  }
+                  maxLength={
+                    MAX_FIRST_NAME_LENGTH
+                  }
+                  required
+                  autoComplete="given-name"
+                />
+
+              </div>
+
+              <div className="form-field">
+
+                <label>
+                  Last name
+                </label>
+
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) =>
+                    setLastName(
+                      e.target.value
+                    )
+                  }
+                  maxLength={
+                    MAX_LAST_NAME_LENGTH
+                  }
+                  required
+                  autoComplete="family-name"
+                />
+
+              </div>
 
             </div>
           )}
