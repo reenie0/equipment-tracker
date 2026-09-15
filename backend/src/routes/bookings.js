@@ -12,6 +12,7 @@ const router = express.Router();
 
 router.use(requireAuth);
 
+
 /*
 ====================================================
 RELEASE EXPIRED BOOKINGS
@@ -19,7 +20,9 @@ RELEASE EXPIRED BOOKINGS
 */
 
 function releaseExpiredBookings() {
-  const now = new Date().toISOString();
+
+  const now =
+    new Date().toISOString();
 
   const expired = db
     .prepare(`
@@ -31,24 +34,33 @@ function releaseExpiredBookings() {
     `)
     .all(now);
 
-  const markCompleted = db.prepare(`
-    UPDATE bookings
-    SET status = 'completed'
-    WHERE id = ?
-  `);
+  const markCompleted =
+    db.prepare(`
+      UPDATE bookings
+      SET status = 'completed'
+      WHERE id = ?
+    `);
 
-  const freeEquipment = db.prepare(`
-    UPDATE equipment
-    SET status = 'available'
-    WHERE id = ?
-    AND status = 'booked'
-  `);
+  const freeEquipment =
+    db.prepare(`
+      UPDATE equipment
+      SET status = 'available'
+      WHERE id = ?
+      AND status = 'booked'
+    `);
 
   for (const booking of expired) {
-    markCompleted.run(booking.id);
-    freeEquipment.run(booking.equipment_id);
+
+    markCompleted.run(
+      booking.id
+    );
+
+    freeEquipment.run(
+      booking.equipment_id
+    );
   }
 }
+
 
 /*
 ====================================================
@@ -57,20 +69,32 @@ FULL BOOKING
 */
 
 function fullBooking(id) {
+
   return db
     .prepare(`
       SELECT
         b.*,
+
         e.code AS equipment_code,
+
         e.name AS equipment_name,
-        e.category AS equipment_category
+
+        e.category AS equipment_category,
+
+        e.serial_number,
+
+        e.department AS equipment_department
+
       FROM bookings b
+
       JOIN equipment e
         ON e.id = b.equipment_id
+
       WHERE b.id = ?
     `)
     .get(id);
 }
+
 
 /*
 ====================================================
@@ -79,9 +103,13 @@ CHECK EXPIRED BOOKINGS BEFORE REQUESTS
 */
 
 router.use((req, res, next) => {
+
   releaseExpiredBookings();
+
   next();
+
 });
+
 
 /*
 ====================================================
@@ -90,16 +118,19 @@ CREATE BOOKING REQUEST
 
 Staff, Manager and Super User can request
 equipment.
+====================================================
 */
 
 router.post("/", (req, res) => {
+
   const {
     equipment_id,
     purpose,
     duration_hours
   } = req.body || {};
 
-  const durationNum = Number(duration_hours);
+  const durationNum =
+    Number(duration_hours);
 
   if (
     !equipment_id ||
@@ -107,62 +138,104 @@ router.post("/", (req, res) => {
     !durationNum ||
     durationNum <= 0
   ) {
+
     return res.status(400).json({
       error:
         "Equipment, purpose, and a positive duration are required"
     });
+
   }
 
-  const equipment = db
-    .prepare(
-      "SELECT * FROM equipment WHERE id = ?"
-    )
-    .get(equipment_id);
+
+  const equipment =
+    db
+      .prepare(
+        "SELECT * FROM equipment WHERE id = ?"
+      )
+      .get(equipment_id);
+
 
   if (!equipment) {
+
     return res.status(404).json({
-      error: "Equipment not found"
+      error:
+        "Equipment not found"
     });
+
   }
 
-  if (equipment.status !== "available") {
+
+  if (
+    equipment.status !== "available"
+  ) {
+
     return res.status(409).json({
       error:
         "This equipment is not currently available"
     });
+
   }
+
 
   const gatePassCode =
     `GP-${uuidv4().slice(0, 8).toUpperCase()}`;
 
-  const info = db
-    .prepare(`
-      INSERT INTO bookings (
+
+  /*
+  --------------------------------------------------
+  REQUESTER NAME
+  --------------------------------------------------
+  */
+
+  const requesterName =
+    req.user.name ||
+    `${req.user.first_name || ""} ${req.user.last_name || ""}`.trim();
+
+
+  const info =
+    db
+      .prepare(`
+        INSERT INTO bookings (
+          equipment_id,
+          requester_id,
+          requester_name,
+          purpose,
+          duration_hours,
+          status,
+          gate_pass_code
+        )
+
+        VALUES (
+          ?,
+          ?,
+          ?,
+          ?,
+          ?,
+          'pending',
+          ?
+        )
+      `)
+      .run(
         equipment_id,
-        requester_id,
-        requester_name,
+        req.user.id,
+        requesterName,
         purpose,
-        duration_hours,
-        status,
-        gate_pass_code
-      )
-      VALUES (?, ?, ?, ?, ?, 'pending', ?)
-    `)
-    .run(
-      equipment_id,
-      req.user.id,
-      req.user.name,
-      purpose,
-      durationNum,
-      gatePassCode
-    );
+        durationNum,
+        gatePassCode
+      );
+
 
   res.status(201).json({
-    booking: fullBooking(
-      info.lastInsertRowid
-    )
+
+    booking:
+      fullBooking(
+        info.lastInsertRowid
+      )
+
   });
+
 });
+
 
 /*
 ====================================================
@@ -186,40 +259,75 @@ router.get("/", (req, res) => {
     req.user.role === "manager" ||
     req.user.role === "superuser";
 
-  const rows = isManagement
-    ? db
-        .prepare(`
-          SELECT
-            b.*,
-            e.code AS equipment_code,
-            e.name AS equipment_name,
-            e.category AS equipment_category
-          FROM bookings b
-          JOIN equipment e
-            ON e.id = b.equipment_id
-          ORDER BY b.requested_at DESC
-        `)
-        .all()
 
-    : db
-        .prepare(`
-          SELECT
-            b.*,
-            e.code AS equipment_code,
-            e.name AS equipment_name,
-            e.category AS equipment_category
-          FROM bookings b
-          JOIN equipment e
-            ON e.id = b.equipment_id
-          WHERE b.requester_id = ?
-          ORDER BY b.requested_at DESC
-        `)
-        .all(req.user.id);
+  const rows =
+    isManagement
+
+      ? db
+          .prepare(`
+            SELECT
+
+              b.*,
+
+              e.code
+                AS equipment_code,
+
+              e.name
+                AS equipment_name,
+
+              e.category
+                AS equipment_category,
+
+              e.serial_number
+
+            FROM bookings b
+
+            JOIN equipment e
+              ON e.id = b.equipment_id
+
+            ORDER BY
+              b.requested_at DESC
+          `)
+          .all()
+
+      : db
+          .prepare(`
+            SELECT
+
+              b.*,
+
+              e.code
+                AS equipment_code,
+
+              e.name
+                AS equipment_name,
+
+              e.category
+                AS equipment_category,
+
+              e.serial_number
+
+            FROM bookings b
+
+            JOIN equipment e
+              ON e.id = b.equipment_id
+
+            WHERE b.requester_id = ?
+
+            ORDER BY
+              b.requested_at DESC
+          `)
+          .all(
+            req.user.id
+          );
+
 
   res.json({
     bookings: rows
   });
+
 });
+
 
 /*
 ====================================================
@@ -235,80 +343,121 @@ router.post(
   requireManager,
   (req, res) => {
 
-    const booking = db
-      .prepare(
-        "SELECT * FROM bookings WHERE id = ?"
-      )
-      .get(req.params.id);
+    const booking =
+      db
+        .prepare(
+          "SELECT * FROM bookings WHERE id = ?"
+        )
+        .get(req.params.id);
+
 
     if (!booking) {
+
       return res.status(404).json({
-        error: "Request not found"
+        error:
+          "Request not found"
       });
+
     }
 
-    if (booking.status !== "pending") {
+
+    if (
+      booking.status !== "pending"
+    ) {
+
       return res.status(409).json({
         error:
           "This request has already been decided"
       });
+
     }
 
-    const equipment = db
-      .prepare(
-        "SELECT * FROM equipment WHERE id = ?"
-      )
-      .get(booking.equipment_id);
+
+    const equipment =
+      db
+        .prepare(
+          "SELECT * FROM equipment WHERE id = ?"
+        )
+        .get(
+          booking.equipment_id
+        );
+
 
     if (
       !equipment ||
       equipment.status !== "available"
     ) {
+
       return res.status(409).json({
         error:
           "Equipment is no longer available"
       });
+
     }
 
-    const expiresAt = new Date(
-      Date.now() +
-      booking.duration_hours *
-      60 *
-      60 *
-      1000
-    ).toISOString();
+
+    const expiresAt =
+      new Date(
+        Date.now() +
+        booking.duration_hours *
+        60 *
+        60 *
+        1000
+      ).toISOString();
+
 
     const now =
       new Date().toISOString();
 
+
+    /*
+    --------------------------------------------------
+    RECORD MANAGER WHO APPROVED
+    --------------------------------------------------
+    */
+
     db.prepare(`
       UPDATE bookings
+
       SET
         status = 'accepted',
+
         decided_at = ?,
-        expires_at = ?
+
+        expires_at = ?,
+
+        decided_by = ?
+
       WHERE id = ?
     `).run(
       now,
       expiresAt,
+      req.user.id,
       booking.id
     );
 
+
     db.prepare(`
       UPDATE equipment
+
       SET status = 'booked'
+
       WHERE id = ?
     `).run(
       booking.equipment_id
     );
 
+
     res.json({
-      booking: fullBooking(
-        booking.id
-      )
+      booking:
+        fullBooking(
+          booking.id
+        )
     });
+
   }
 );
+
 
 /*
 ====================================================
@@ -328,45 +477,74 @@ router.post(
       manager_note
     } = req.body || {};
 
-    const booking = db
-      .prepare(
-        "SELECT * FROM bookings WHERE id = ?"
-      )
-      .get(req.params.id);
+
+    const booking =
+      db
+        .prepare(
+          "SELECT * FROM bookings WHERE id = ?"
+        )
+        .get(req.params.id);
+
 
     if (!booking) {
+
       return res.status(404).json({
-        error: "Request not found"
+        error:
+          "Request not found"
       });
+
     }
 
-    if (booking.status !== "pending") {
+
+    if (
+      booking.status !== "pending"
+    ) {
+
       return res.status(409).json({
         error:
           "This request has already been decided"
       });
+
     }
+
+
+    /*
+    --------------------------------------------------
+    RECORD MANAGER WHO REJECTED
+    --------------------------------------------------
+    */
 
     db.prepare(`
       UPDATE bookings
+
       SET
         status = 'rejected',
+
         decided_at = ?,
-        manager_note = ?
+
+        manager_note = ?,
+
+        decided_by = ?
+
       WHERE id = ?
     `).run(
       new Date().toISOString(),
       manager_note || null,
+      req.user.id,
       booking.id
     );
 
+
     res.json({
-      booking: fullBooking(
-        booking.id
-      )
+      booking:
+        fullBooking(
+          booking.id
+        )
     });
+
   }
 );
+
 
 /*
 ====================================================
@@ -374,12 +552,6 @@ RETURN EQUIPMENT
 ====================================================
 
 Manager OR Super User only.
-
-The manager records what state the equipment came
-back in — available, needs repair, or damaged/out
-of service — plus an optional note (required unless
-the equipment came back fine). That status becomes
-the equipment's new status.
 ====================================================
 */
 
@@ -388,6 +560,7 @@ const RETURN_STATUSES = [
   "repair",
   "out_of_service"
 ];
+
 
 router.post(
   "/:id/return",
@@ -399,71 +572,124 @@ router.post(
       note: rawNote
     } = req.body || {};
 
-    const note = typeof rawNote === "string" ? rawNote.trim() : "";
 
-    if (!RETURN_STATUSES.includes(status)) {
+    const note =
+      typeof rawNote === "string"
+        ? rawNote.trim()
+        : "";
+
+
+    if (
+      !RETURN_STATUSES.includes(
+        status
+      )
+    ) {
+
       return res.status(400).json({
         error:
           "Please choose the equipment's condition: available, repair, or out_of_service"
       });
+
     }
 
+
     if (
-      (status === "repair" || status === "out_of_service") &&
+      (
+        status === "repair" ||
+        status === "out_of_service"
+      ) &&
       !note
     ) {
+
       return res.status(400).json({
         error:
           "Please add a note describing what's wrong with the equipment"
       });
+
     }
 
-    const booking = db
-      .prepare(
-        "SELECT * FROM bookings WHERE id = ?"
-      )
-      .get(req.params.id);
+
+    const booking =
+      db
+        .prepare(
+          "SELECT * FROM bookings WHERE id = ?"
+        )
+        .get(req.params.id);
+
 
     if (!booking) {
+
       return res.status(404).json({
-        error: "Request not found"
+        error:
+          "Request not found"
       });
+
     }
 
-    if (booking.status !== "accepted") {
+
+    if (
+      booking.status !== "accepted"
+    ) {
+
       return res.status(409).json({
         error:
           "This booking is not currently active"
       });
+
     }
+
+
+    /*
+    --------------------------------------------------
+    RECORD RETURN + MANAGER
+    --------------------------------------------------
+    */
 
     db.prepare(`
       UPDATE bookings
+
       SET
         status = 'completed',
+
         return_status = ?,
+
         return_note = ?,
-        returned_at = ?
+
+        returned_at = ?,
+
+        returned_by = ?
+
       WHERE id = ?
     `).run(
       status,
       note || null,
       new Date().toISOString(),
+      req.user.id,
       booking.id
     );
 
+
     db.prepare(`
       UPDATE equipment
+
       SET status = ?
+
       WHERE id = ?
-    `).run(status, booking.equipment_id);
+    `).run(
+      status,
+      booking.equipment_id
+    );
+
 
     res.json({
-      booking: fullBooking(
-        booking.id
-      )
+      booking:
+        fullBooking(
+          booking.id
+        )
     });
+
   }
 );
+
 
 module.exports = router;
