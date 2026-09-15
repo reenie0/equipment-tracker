@@ -7,6 +7,8 @@ const equipmentRoutes = require("./routes/equipment");
 const bookingRoutes = require("./routes/bookings");
 const userRoutes = require("./routes/users");
 const reportsRoutes = require("./routes/reports");
+const historyRoutes = require("./routes/history");
+const categoriesRoutes = require("./routes/categories");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -21,6 +23,8 @@ app.use("/api/equipment", equipmentRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/history", historyRoutes);
+app.use("/api/categories", categoriesRoutes);
 
 // Fallback error handler so unexpected errors return JSON, not an HTML stack trace
 app.use((err, req, res, next) => {
