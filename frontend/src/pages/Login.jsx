@@ -921,16 +921,7 @@ export default function Login() {
 
         </div>
 
-        {mode === "login" && (
-          <div className="demo-box">
-            Demo manager: manager / manager123
-            <br />
-            Demo user: user / user123
-            <br />
-            New users created by a Super User
-            receive a temporary password.
-          </div>
-        )}
+        
 
       </div>
     </div>

@@ -1,3 +1,4 @@
+
 const BASE = "/api";
 
 async function request(
@@ -228,6 +229,64 @@ export const api = {
 
 
   // ==================================================
+  // CATEGORIES
+  // ==================================================
+
+  listCategories: (token) =>
+    request("/categories", {
+      method: "GET",
+      token,
+    }),
+
+  getCategory: (
+    token,
+    id
+  ) =>
+    request(`/categories/${id}`, {
+      method: "GET",
+      token,
+    }),
+
+  createCategory: (
+    token,
+    name
+  ) =>
+    request("/categories", {
+      method: "POST",
+
+      body: {
+        name,
+      },
+
+      token,
+    }),
+
+  updateCategory: (
+    token,
+    id,
+    name
+  ) =>
+    request(`/categories/${id}`, {
+      method: "PATCH",
+
+      body: {
+        name,
+      },
+
+      token,
+    }),
+
+  deleteCategory: (
+    token,
+    id
+  ) =>
+    request(`/categories/${id}`, {
+      method: "DELETE",
+      token,
+    }),
+
+
+  // ==================================================
   // BOOKINGS
   // ==================================================
 
@@ -278,6 +337,29 @@ export const api = {
     request(`/bookings/${id}/return`, {
       method: "POST",
       body: payload,
+      token,
+    }),
+
+
+  // ==================================================
+  // HISTORY
+  // ==================================================
+
+  listHistory: (token) =>
+    request("/history", {
+      method: "GET",
+      token,
+    }),
+
+  listAllocationHistory: (token) =>
+    request("/history/allocations", {
+      method: "GET",
+      token,
+    }),
+
+  listReturnHistory: (token) =>
+    request("/history/returns", {
+      method: "GET",
       token,
     }),
 };

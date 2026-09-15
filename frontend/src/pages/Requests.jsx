@@ -20,6 +20,7 @@ export default function Requests() {
   const { token } = useAuth();
   const [bookings, setBookings] = useState([]);
   const [tab, setTab] = useState("pending");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
@@ -58,7 +59,21 @@ export default function Requests() {
     [bookings]
   );
 
-  const visible = grouped[tab];
+  const visible = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const list = grouped[tab];
+
+    if (!term) return list;
+
+    return list.filter((b) => {
+      const haystack = [b.equipment_name, b.equipment_code, b.purpose]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(term);
+    });
+  }, [grouped, tab, search]);
 
   return (
     <div className="page">
@@ -69,6 +84,17 @@ export default function Requests() {
             <h1 className="page-title">Booking requests</h1>
             <p className="page-sub">Track every gate pass you've requested. A manager marks the equipment returned.</p>
           </div>
+        </div>
+
+        <div className="form-field" style={{ maxWidth: 360 }}>
+          <label htmlFor="requests-search">Search</label>
+          <input
+            id="requests-search"
+            type="text"
+            placeholder="Search by equipment or purpose…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
 
         <div className="tabs">
@@ -83,7 +109,9 @@ export default function Requests() {
         {loading ? (
           <div className="empty-state">Loading requests…</div>
         ) : visible.length === 0 ? (
-          <div className="empty-state">Nothing here yet.</div>
+          <div className="empty-state">
+            {search.trim() ? `No requests match "${search}".` : "Nothing here yet."}
+          </div>
         ) : (
           <div className="request-list">
             {visible.map((b) => (

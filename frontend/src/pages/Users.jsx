@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -7,16 +8,67 @@ import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 
 
+/* ==================================================
+   USER DEPARTMENTS
+   ================================================== */
+
 const DEPARTMENTS = [
+  "Newsroom",
   "Post Production",
   "Production",
   "Transmission",
-  "IT",
-  "Newsroom Creatives",
-  "Admin",
+  "Marketing",
   "Social Media",
+  "IT",
+  "Musanza",
   "Security",
+  "Administration",
   "Programming",
+  "Finance",
+];
+
+
+/* ==================================================
+   USER ROLES
+   ================================================== */
+
+const ROLES = [
+  {
+    value: "all",
+    label: "All roles",
+  },
+  {
+    value: "staff",
+    label: "Staff",
+  },
+  {
+    value: "manager",
+    label: "Manager",
+  },
+  {
+    value: "superuser",
+    label: "Super User",
+  },
+];
+
+
+/* ==================================================
+   USER STATUS
+   ================================================== */
+
+const STATUSES = [
+  {
+    value: "all",
+    label: "All statuses",
+  },
+  {
+    value: "active",
+    label: "Active",
+  },
+  {
+    value: "inactive",
+    label: "Inactive",
+  },
 ];
 
 
@@ -37,6 +89,133 @@ export default function Users() {
 
   const [loading, setLoading] =
     useState(true);
+
+
+  /* ==================================================
+     SEARCH AND FILTERS
+     ================================================== */
+
+  const [search, setSearch] =
+    useState("");
+
+  const [department, setDepartment] =
+    useState("all");
+
+  const [status, setStatus] =
+    useState("all");
+
+  const [role, setRole] =
+    useState("all");
+
+
+  /* ==================================================
+     FILTER USERS
+     ================================================== */
+
+  const filteredUsers =
+    useMemo(() => {
+
+      const term =
+        search
+          .trim()
+          .toLowerCase();
+
+      return users.filter(
+        (item) => {
+
+          /* ------------------------------------------
+             SEARCH
+             ------------------------------------------ */
+
+          const searchMatches =
+            !term ||
+            [
+              item.first_name,
+              item.last_name,
+              `${item.first_name || ""} ${item.last_name || ""}`,
+              item.username,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase()
+              .includes(term);
+
+
+          /* ------------------------------------------
+             DEPARTMENT
+             ------------------------------------------ */
+
+          const departmentMatches =
+            department === "all" ||
+            item.department === department;
+
+
+          /* ------------------------------------------
+             STATUS
+             ------------------------------------------ */
+
+          const statusMatches =
+            status === "all" ||
+            (
+              status === "active" &&
+              Boolean(item.active)
+            ) ||
+            (
+              status === "inactive" &&
+              !Boolean(item.active)
+            );
+
+
+          /* ------------------------------------------
+             ROLE
+             ------------------------------------------ */
+
+          const roleMatches =
+            role === "all" ||
+            item.role === role;
+
+
+          return (
+            searchMatches &&
+            departmentMatches &&
+            statusMatches &&
+            roleMatches
+          );
+        }
+      );
+
+    }, [
+      users,
+      search,
+      department,
+      status,
+      role,
+    ]);
+
+
+  /* ==================================================
+     ACTIVE FILTER CHECK
+     ================================================== */
+
+  const filtersActive =
+    search.trim() !== "" ||
+    department !== "all" ||
+    status !== "all" ||
+    role !== "all";
+
+
+  /* ==================================================
+     CLEAR FILTERS
+     ================================================== */
+
+  const clearFilters = () => {
+
+    setSearch("");
+    setDepartment("all");
+    setStatus("all");
+    setRole("all");
+
+  };
 
 
   /* ==================================================
@@ -96,16 +275,13 @@ export default function Users() {
 
   /* ==================================================
      RESET PASSWORD
+
+     Resetting always sets the account back to the
+     fixed default temporary password.
      ================================================== */
 
   const [passwordUser, setPasswordUser] =
     useState(null);
-
-  const [newPassword, setNewPassword] =
-    useState("");
-
-  const [confirmPassword, setConfirmPassword] =
-    useState("");
 
   const [resettingPassword, setResettingPassword] =
     useState(false);
@@ -204,46 +380,58 @@ export default function Users() {
       if (
         !newUser.first_name.trim()
       ) {
+
         setToast({
           type: "error",
           text:
             "Please enter the user's first name.",
         });
+
         return;
       }
+
 
       if (
         !newUser.last_name.trim()
       ) {
+
         setToast({
           type: "error",
           text:
             "Please enter the user's last name.",
         });
+
         return;
       }
+
 
       if (
         !newUser.username.trim()
       ) {
+
         setToast({
           type: "error",
           text:
             "Please enter a username.",
         });
+
         return;
       }
+
 
       if (
         !newUser.department
       ) {
+
         setToast({
           type: "error",
           text:
             "Please select a department.",
         });
+
         return;
       }
+
 
       try {
 
@@ -252,14 +440,18 @@ export default function Users() {
             token,
             {
               ...newUser,
+
               first_name:
                 newUser.first_name.trim(),
+
               last_name:
                 newUser.last_name.trim(),
+
               username:
                 newUser.username.trim(),
             }
           );
+
 
         setUsers(
           (prev) => [
@@ -267,6 +459,7 @@ export default function Users() {
             ...prev,
           ]
         );
+
 
         setCreatedUser({
           firstName:
@@ -285,6 +478,7 @@ export default function Users() {
             result.temporary_password,
         });
 
+
         setNewUser({
           first_name: "",
           last_name: "",
@@ -292,6 +486,7 @@ export default function Users() {
           role: "staff",
           department: "",
         });
+
 
         setShowAdd(false);
 
@@ -346,43 +541,57 @@ export default function Users() {
 
       setEditError("");
 
+
       if (
         !editForm.first_name.trim()
       ) {
+
         setEditError(
           "First name is required."
         );
+
         return;
       }
+
 
       if (
         !editForm.last_name.trim()
       ) {
+
         setEditError(
           "Last name is required."
         );
+
         return;
       }
+
 
       if (
         !editForm.username.trim()
       ) {
+
         setEditError(
           "Username is required."
         );
+
         return;
       }
+
 
       if (
         !editForm.department
       ) {
+
         setEditError(
           "Please select a department."
         );
+
         return;
       }
 
+
       setSavingEdit(true);
+
 
       try {
 
@@ -405,6 +614,7 @@ export default function Users() {
             }
           );
 
+
         setUsers(
           (prev) =>
             prev.map(
@@ -416,7 +626,9 @@ export default function Users() {
             )
         );
 
+
         setEditUser(null);
+
 
         setToast({
           type: "ok",
@@ -446,7 +658,7 @@ export default function Users() {
   const handleRoleChange =
     async (
       id,
-      role
+      newRole
     ) => {
 
       try {
@@ -455,8 +667,9 @@ export default function Users() {
           await api.changeUserRole(
             token,
             id,
-            role
+            newRole
           );
+
 
         setUsers(
           (prev) =>
@@ -467,6 +680,7 @@ export default function Users() {
                   : u
             )
         );
+
 
         setToast({
           type: "ok",
@@ -507,6 +721,7 @@ export default function Users() {
             active
           );
 
+
         setUsers(
           (prev) =>
             prev.map(
@@ -516,6 +731,7 @@ export default function Users() {
                   : u
             )
         );
+
 
         setToast({
           type: "ok",
@@ -548,10 +764,6 @@ export default function Users() {
 
       setPasswordUser(item);
 
-      setNewPassword("");
-
-      setConfirmPassword("");
-
       setPasswordError("");
 
       setResetResult(null);
@@ -563,57 +775,35 @@ export default function Users() {
      ================================================== */
 
   const handleResetPassword =
-    async (e) => {
-
-      e.preventDefault();
+    async () => {
 
       setPasswordError("");
 
-      if (
-        newPassword.length < 6
-      ) {
-        setPasswordError(
-          "Password must be at least 6 characters."
-        );
-        return;
-      }
-
-      if (
-        newPassword !==
-        confirmPassword
-      ) {
-        setPasswordError(
-          "Passwords do not match."
-        );
-        return;
-      }
-
       setResettingPassword(true);
+
 
       try {
 
-        await api.resetUserPassword(
-          token,
-          passwordUser.id,
-          newPassword
-        );
+        const result =
+          await api.resetUserPassword(
+            token,
+            passwordUser.id
+          );
+
 
         setResetResult({
           username:
             passwordUser.username,
 
           password:
-            newPassword,
+            result.temporary_password,
         });
 
-        setNewPassword("");
-
-        setConfirmPassword("");
 
         setToast({
           type: "ok",
           text:
-            "Password reset successfully.",
+            "Password reset to the default password.",
         });
 
       } catch (err) {
@@ -647,12 +837,16 @@ export default function Users() {
         <div className="container">
 
           <div className="empty-state">
-            You do not have permission to manage users.
+
+            You do not have permission
+            to manage users.
+
           </div>
 
         </div>
 
       </div>
+
     );
   }
 
@@ -666,6 +860,7 @@ export default function Users() {
     <div className="page">
 
       <div className="container">
+
 
         {/* ==================================================
             HEADER
@@ -705,6 +900,251 @@ export default function Users() {
 
 
         {/* ==================================================
+            SEARCH
+            ================================================== */}
+
+        <div className="user-filter-panel">
+
+          <div className="user-filter-header">
+
+            <div>
+
+              <p className="eyebrow">
+                Search & Filters
+              </p>
+
+              <p className="user-filter-description">
+                Find users by name, department,
+                role, or account status.
+              </p>
+
+            </div>
+
+            {filtersActive && (
+
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={clearFilters}
+              >
+                Clear filters
+              </button>
+
+            )}
+
+          </div>
+
+
+          {/* SEARCH */}
+
+          <div
+            className="form-field"
+            style={{
+              marginBottom: 18,
+            }}
+          >
+
+            <label htmlFor="user-search">
+              Search users
+            </label>
+
+            <input
+              id="user-search"
+              type="text"
+              placeholder="Search first name, last name, or username…"
+              value={search}
+              onChange={(e) =>
+                setSearch(
+                  e.target.value
+                )
+              }
+            />
+
+          </div>
+
+
+          {/* FILTERS */}
+
+          <div className="user-filter-grid">
+
+
+            {/* DEPARTMENT */}
+
+            <div className="form-field">
+
+              <label htmlFor="user-department">
+                Department
+              </label>
+
+              <select
+                id="user-department"
+                value={department}
+                onChange={(e) =>
+                  setDepartment(
+                    e.target.value
+                  )
+                }
+              >
+
+                <option value="all">
+                  All departments
+                </option>
+
+                {DEPARTMENTS.map(
+                  (dept) => (
+
+                    <option
+                      key={dept}
+                      value={dept}
+                    >
+                      {dept}
+                    </option>
+
+                  )
+                )}
+
+              </select>
+
+            </div>
+
+
+            {/* ROLE */}
+
+            <div className="form-field">
+
+              <label htmlFor="user-role">
+                Role
+              </label>
+
+              <select
+                id="user-role"
+                value={role}
+                onChange={(e) =>
+                  setRole(
+                    e.target.value
+                  )
+                }
+              >
+
+                {ROLES.map(
+                  (roleOption) => (
+
+                    <option
+                      key={
+                        roleOption.value
+                      }
+                      value={
+                        roleOption.value
+                      }
+                    >
+                      {
+                        roleOption.label
+                      }
+                    </option>
+
+                  )
+                )}
+
+              </select>
+
+            </div>
+
+
+            {/* STATUS */}
+
+            <div className="form-field">
+
+              <label htmlFor="user-status">
+                Status
+              </label>
+
+              <select
+                id="user-status"
+                value={status}
+                onChange={(e) =>
+                  setStatus(
+                    e.target.value
+                  )
+                }
+              >
+
+                {STATUSES.map(
+                  (statusOption) => (
+
+                    <option
+                      key={
+                        statusOption.value
+                      }
+                      value={
+                        statusOption.value
+                      }
+                    >
+                      {
+                        statusOption.label
+                      }
+                    </option>
+
+                  )
+                )}
+
+              </select>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        {/* ==================================================
+            RESULT SUMMARY
+            ================================================== */}
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            marginBottom: 20,
+          }}
+        >
+
+          <p
+            className="page-sub"
+            style={{
+              margin: 0,
+            }}
+          >
+            Showing{" "}
+            <strong>
+              {filteredUsers.length}
+            </strong>{" "}
+            of{" "}
+            <strong>
+              {users.length}
+            </strong>{" "}
+            users
+          </p>
+
+
+          {filtersActive && (
+
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={
+                clearFilters
+              }
+            >
+              Clear filters
+            </button>
+
+          )}
+
+        </div>
+
+
+        {/* ==================================================
             USER TABLE
             ================================================== */}
 
@@ -718,6 +1158,52 @@ export default function Users() {
 
           <div className="empty-state">
             No users found.
+          </div>
+
+        ) : filteredUsers.length === 0 ? (
+
+          <div className="empty-state">
+
+            <div
+              style={{
+                fontSize: 32,
+                marginBottom: 10,
+              }}
+            >
+              🔍
+            </div>
+
+            <strong>
+              No users found
+            </strong>
+
+            <p
+              className="page-sub"
+              style={{
+                marginTop: 8,
+              }}
+            >
+              No users match your
+              current search and filters.
+            </p>
+
+
+            {filtersActive && (
+
+              <button
+                className="btn btn-primary btn-sm"
+                style={{
+                  marginTop: 10,
+                }}
+                onClick={
+                  clearFilters
+                }
+              >
+                Clear filters
+              </button>
+
+            )}
+
           </div>
 
         ) : (
@@ -765,41 +1251,52 @@ export default function Users() {
 
               <tbody>
 
-                {users.map(
+                {filteredUsers.map(
                   (item) => {
 
                     const isSelf =
                       item.id ===
                       user.id;
 
+
                     return (
 
                       <tr
-                        key={item.id}
+                        key={
+                          item.id
+                        }
                       >
 
                         <td>
                           <strong>
-                            {item.first_name}
+                            {
+                              item.first_name
+                            }
                           </strong>
                         </td>
 
 
                         <td>
                           <strong>
-                            {item.last_name}
+                            {
+                              item.last_name
+                            }
                           </strong>
                         </td>
 
 
                         <td>
-                          {item.username}
+                          {
+                            item.username
+                          }
                         </td>
 
 
                         <td>
-                          {item.department ||
-                            "Not assigned"}
+                          {
+                            item.department ||
+                            "Not assigned"
+                          }
                         </td>
 
 
@@ -812,9 +1309,7 @@ export default function Users() {
                             disabled={
                               isSelf
                             }
-                            onChange={(
-                              e
-                            ) =>
+                            onChange={(e) =>
                               handleRoleChange(
                                 item.id,
                                 e.target.value
@@ -848,9 +1343,13 @@ export default function Users() {
                                 : "status status-repair"
                             }
                           >
-                            {item.active
-                              ? "Active"
-                              : "Inactive"}
+
+                            {
+                              item.active
+                                ? "Active"
+                                : "Inactive"
+                            }
+
                           </span>
 
                         </td>
@@ -915,9 +1414,13 @@ export default function Users() {
                                 )
                               }
                             >
-                              {item.active
-                                ? "Deactivate"
-                                : "Activate"}
+
+                              {
+                                item.active
+                                  ? "Deactivate"
+                                  : "Activate"
+                              }
+
                             </button>
 
                           </div>
@@ -927,6 +1430,7 @@ export default function Users() {
                       </tr>
 
                     );
+
                   }
                 )}
 
@@ -973,7 +1477,20 @@ export default function Users() {
                   Add user
                 </h3>
 
+                <p
+                  style={{
+                    marginTop: 4,
+                    color: "var(--muted)",
+                    fontSize: 12.5,
+                  }}
+                >
+                  New accounts start with the
+                  default temporary password and
+                  must change it at first login.
+                </p>
+
               </div>
+
 
               <button
                 className="close-x"
@@ -988,59 +1505,69 @@ export default function Users() {
 
 
             <form
-              className="form-stack"
               onSubmit={
                 handleAddUser
               }
             >
 
-              <label>
+              <div className="form-grid">
 
-                First name
+                <div className="form-field">
 
-                <input
-                  type="text"
-                  value={
-                    newUser.first_name
-                  }
-                  onChange={(e) =>
-                    setNewUser({
-                      ...newUser,
-                      first_name:
-                        e.target.value,
-                    })
-                  }
-                  placeholder="First name"
-                />
+                  <label>
+                    First name
+                  </label>
 
-              </label>
+                  <input
+                    type="text"
+                    value={
+                      newUser.first_name
+                    }
+                    onChange={(e) =>
+                      setNewUser({
+                        ...newUser,
+                        first_name:
+                          e.target.value,
+                      })
+                    }
+                    placeholder="First name"
+                    autoFocus
+                  />
 
-
-              <label>
-
-                Last name
-
-                <input
-                  type="text"
-                  value={
-                    newUser.last_name
-                  }
-                  onChange={(e) =>
-                    setNewUser({
-                      ...newUser,
-                      last_name:
-                        e.target.value,
-                    })
-                  }
-                  placeholder="Last name"
-                />
-
-              </label>
+                </div>
 
 
-              <label>
+                <div className="form-field">
 
-                Username
+                  <label>
+                    Last name
+                  </label>
+
+                  <input
+                    type="text"
+                    value={
+                      newUser.last_name
+                    }
+                    onChange={(e) =>
+                      setNewUser({
+                        ...newUser,
+                        last_name:
+                          e.target.value,
+                      })
+                    }
+                    placeholder="Last name"
+                  />
+
+                </div>
+
+              </div>
+
+
+              <div className="form-field">
+
+                <label>
+                  Username
+                </label>
 
                 <input
                   type="text"
@@ -1057,83 +1584,91 @@ export default function Users() {
                   placeholder="Username"
                 />
 
-              </label>
+              </div>
 
 
-              <label>
+              <div className="form-grid">
 
-                Department
+                <div className="form-field">
 
-                <select
-                  value={
-                    newUser.department
-                  }
-                  onChange={(e) =>
-                    setNewUser({
-                      ...newUser,
-                      department:
-                        e.target.value,
-                    })
-                  }
-                >
+                  <label>
+                    Department
+                  </label>
 
-                  <option value="">
-                    Select department
-                  </option>
+                  <select
+                    value={
+                      newUser.department
+                    }
+                    onChange={(e) =>
+                      setNewUser({
+                        ...newUser,
+                        department:
+                          e.target.value,
+                      })
+                    }
+                  >
 
-                  {DEPARTMENTS.map(
-                    (dept) => (
+                    <option value="">
+                      Select department
+                    </option>
 
-                      <option
-                        key={dept}
-                        value={dept}
-                      >
-                        {dept}
-                      </option>
+                    {DEPARTMENTS.map(
+                      (dept) => (
 
-                    )
-                  )}
+                        <option
+                          key={dept}
+                          value={dept}
+                        >
+                          {dept}
+                        </option>
 
-                </select>
+                      )
+                    )}
 
-              </label>
+                  </select>
 
-
-              <label>
-
-                Role
-
-                <select
-                  value={
-                    newUser.role
-                  }
-                  onChange={(e) =>
-                    setNewUser({
-                      ...newUser,
-                      role:
-                        e.target.value,
-                    })
-                  }
-                >
-
-                  <option value="staff">
-                    Staff
-                  </option>
-
-                  <option value="manager">
-                    Manager
-                  </option>
-
-                  <option value="superuser">
-                    Super User
-                  </option>
-
-                </select>
-
-              </label>
+                </div>
 
 
-              <div className="modal-actions">
+                <div className="form-field">
+
+                  <label>
+                    Role
+                  </label>
+
+                  <select
+                    value={
+                      newUser.role
+                    }
+                    onChange={(e) =>
+                      setNewUser({
+                        ...newUser,
+                        role:
+                          e.target.value,
+                      })
+                    }
+                  >
+
+                    <option value="staff">
+                      Staff
+                    </option>
+
+                    <option value="manager">
+                      Manager
+                    </option>
+
+                    <option value="superuser">
+                      Super User
+                    </option>
+
+                  </select>
+
+                </div>
+
+              </div>
+
+
+              <div className="modal-footer">
 
                 <button
                   type="button"
@@ -1144,6 +1679,7 @@ export default function Users() {
                 >
                   Cancel
                 </button>
+
 
                 <button
                   type="submit"
@@ -1197,6 +1733,7 @@ export default function Users() {
 
               </div>
 
+
               <button
                 className="close-x"
                 onClick={() =>
@@ -1209,111 +1746,131 @@ export default function Users() {
             </div>
 
 
-            <div className="form-stack">
+            <div className="eq-details">
 
-              <div>
+              <div className="eq-detail">
 
-                <strong>
+                <span className="eq-detail-label">
                   First name
-                </strong>
+                </span>
 
-                <div>
-                  {createdUser.firstName}
-                </div>
+                <span className="eq-detail-value">
+                  {
+                    createdUser.firstName
+                  }
+                </span>
 
               </div>
 
 
-              <div>
+              <div className="eq-detail">
 
-                <strong>
+                <span className="eq-detail-label">
                   Last name
-                </strong>
+                </span>
 
-                <div>
-                  {createdUser.lastName}
-                </div>
+                <span className="eq-detail-value">
+                  {
+                    createdUser.lastName
+                  }
+                </span>
 
               </div>
 
 
-              <div>
+              <div className="eq-detail">
 
-                <strong>
+                <span className="eq-detail-label">
                   Username
-                </strong>
+                </span>
 
-                <div>
-                  {createdUser.username}
-                </div>
+                <span className="eq-detail-value">
+                  {
+                    createdUser.username
+                  }
+                </span>
 
               </div>
 
 
-              <div>
+              <div className="eq-detail">
 
-                <strong>
+                <span className="eq-detail-label">
                   Department
-                </strong>
+                </span>
 
-                <div>
-                  {createdUser.department}
-                </div>
+                <span className="eq-detail-value">
+                  {
+                    createdUser.department
+                  }
+                </span>
 
               </div>
 
+            </div>
+
+
+            <div
+              style={{
+                marginTop: 16,
+                padding: 14,
+                borderRadius:
+                  "var(--radius-lg)",
+                background:
+                  "var(--surface-soft)",
+                border:
+                  "1px solid var(--border)",
+              }}
+            >
 
               <div
+                className="eyebrow"
                 style={{
-                  padding: 14,
-                  borderRadius: 10,
-                  background:
-                    "var(--surface-2, rgba(127,127,127,.08))",
+                  marginBottom: 5,
                 }}
               >
-
-                <div
-                  className="eyebrow"
-                  style={{
-                    marginBottom: 5,
-                  }}
-                >
-                  Temporary password
-                </div>
-
-                <strong
-                  style={{
-                    fontSize: 20,
-                  }}
-                >
-                  {createdUser.password}
-                </strong>
-
+                Temporary password
               </div>
 
 
-              <p className="page-sub">
+              <strong
+                style={{
+                  fontSize: 20,
+                  fontFamily:
+                    "var(--font-mono)",
+                }}
+              >
+                {
+                  createdUser.password
+                }
+              </strong>
 
-                The user must change this
-                password when they first log in.
-
-              </p>
+            </div>
 
 
-              <div className="modal-actions">
+            <p
+              className="page-sub"
+              style={{
+                marginTop: 14,
+              }}
+            >
+              The user must change this
+              password when they first log in.
+            </p>
 
-                <button
-                  className="btn btn-primary"
-                  onClick={() =>
-                    setCreatedUser(
-                      null
-                    )
-                  }
-                >
-                  Done
-                </button>
 
-              </div>
+            <div className="modal-footer">
+
+              <button
+                className="btn btn-primary"
+                onClick={() =>
+                  setCreatedUser(
+                    null
+                  )
+                }
+              >
+                Done
+              </button>
 
             </div>
 
@@ -1339,11 +1896,11 @@ export default function Users() {
         >
 
           <div
-  className="modal edit-equipment-modal"
-  onClick={(e) =>
-    e.stopPropagation()
-  }
->
+            className="modal"
+            onClick={(e) =>
+              e.stopPropagation()
+            }
+          >
 
             <div className="modal-header">
 
@@ -1358,6 +1915,7 @@ export default function Users() {
                 </h3>
 
               </div>
+
 
               <button
                 className="close-x"
@@ -1377,63 +1935,72 @@ export default function Users() {
 
 
             <form
-              className="form-stack"
               onSubmit={
                 handleEditUser
               }
             >
 
-              <label>
+              <div className="form-grid">
 
-                First name
+                <div className="form-field">
 
-                <input
-                  type="text"
-                  value={
-                    editForm.first_name
-                  }
-                  onChange={(e) =>
-                    setEditForm({
-                      ...editForm,
-                      first_name:
-                        e.target.value,
-                    })
-                  }
-                  disabled={
-                    savingEdit
-                  }
-                />
+                  <label>
+                    First name
+                  </label>
 
-              </label>
+                  <input
+                    type="text"
+                    value={
+                      editForm.first_name
+                    }
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        first_name:
+                          e.target.value,
+                      })
+                    }
+                    disabled={
+                      savingEdit
+                    }
+                  />
 
-
-              <label>
-
-                Last name
-
-                <input
-                  type="text"
-                  value={
-                    editForm.last_name
-                  }
-                  onChange={(e) =>
-                    setEditForm({
-                      ...editForm,
-                      last_name:
-                        e.target.value,
-                    })
-                  }
-                  disabled={
-                    savingEdit
-                  }
-                />
-
-              </label>
+                </div>
 
 
-              <label>
+                <div className="form-field">
 
-                Username
+                  <label>
+                    Last name
+                  </label>
+
+                  <input
+                    type="text"
+                    value={
+                      editForm.last_name
+                    }
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        last_name:
+                          e.target.value,
+                      })
+                    }
+                    disabled={
+                      savingEdit
+                    }
+                  />
+
+                </div>
+
+              </div>
+
+
+              <div className="form-field">
+
+                <label>
+                  Username
+                </label>
 
                 <input
                   type="text"
@@ -1452,12 +2019,14 @@ export default function Users() {
                   }
                 />
 
-              </label>
+              </div>
 
 
-              <label>
+              <div className="form-field">
 
-                Department
+                <label>
+                  Department
+                </label>
 
                 <select
                   value={
@@ -1494,7 +2063,7 @@ export default function Users() {
 
                 </select>
 
-              </label>
+              </div>
 
 
               {editError && (
@@ -1508,7 +2077,7 @@ export default function Users() {
               )}
 
 
-              <div className="modal-actions">
+              <div className="modal-footer">
 
                 <button
                   type="button"
@@ -1533,9 +2102,11 @@ export default function Users() {
                     savingEdit
                   }
                 >
-                  {savingEdit
-                    ? "Saving…"
-                    : "Save changes"}
+                  {
+                    savingEdit
+                      ? "Saving…"
+                      : "Save changes"
+                  }
                 </button>
 
               </div>
@@ -1590,6 +2161,7 @@ export default function Users() {
 
                   </div>
 
+
                   <button
                     className="close-x"
                     disabled={
@@ -1608,121 +2180,75 @@ export default function Users() {
 
 
                 <p className="page-sub">
-                  Set a new password for{" "}
+
+                  This will reset{" "}
+
                   <strong>
-                    {passwordUser.first_name}{" "}
-                    {passwordUser.last_name}
+                    {
+                      passwordUser.first_name
+                    }{" "}
+                    {
+                      passwordUser.last_name
+                    }
                   </strong>
-                  .
+
+                  's password back to the
+                  default temporary password.
+                  They'll be required to change
+                  it the next time they log in.
+
                 </p>
 
 
-                <form
-                  className="form-stack"
-                  onSubmit={
-                    handleResetPassword
-                  }
-                >
+                {passwordError && (
 
-                  <label>
-
-                    New password
-
-                    <input
-                      type="password"
-                      value={
-                        newPassword
-                      }
-                      onChange={(e) =>
-                        setNewPassword(
-                          e.target.value
-                        )
-                      }
-                      placeholder="At least 6 characters"
-                      disabled={
-                        resettingPassword
-                      }
-                    />
-
-                  </label>
-
-
-                  <label>
-
-                    Confirm password
-
-                    <input
-                      type="password"
-                      value={
-                        confirmPassword
-                      }
-                      onChange={(e) =>
-                        setConfirmPassword(
-                          e.target.value
-                        )
-                      }
-                      placeholder="Enter password again"
-                      disabled={
-                        resettingPassword
-                      }
-                    />
-
-                  </label>
-
-
-                  {passwordError && (
-
-                    <div
-                      className="form-error"
-                    >
-                      {passwordError}
-                    </div>
-
-                  )}
-
-
-                  <p className="page-sub">
-
-                    The user will be required to
-                    change this password when they
-                    next log in.
-
-                  </p>
-
-
-                  <div className="modal-actions">
-
-                    <button
-                      type="button"
-                      className="btn"
-                      disabled={
-                        resettingPassword
-                      }
-                      onClick={() =>
-                        setPasswordUser(
-                          null
-                        )
-                      }
-                    >
-                      Cancel
-                    </button>
-
-
-                    <button
-                      type="submit"
-                      className="btn btn-primary"
-                      disabled={
-                        resettingPassword
-                      }
-                    >
-                      {resettingPassword
-                        ? "Resetting…"
-                        : "Reset password"}
-                    </button>
-
+                  <div
+                    className="form-error"
+                  >
+                    {
+                      passwordError
+                    }
                   </div>
 
-                </form>
+                )}
+
+
+                <div className="modal-footer">
+
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={
+                      resettingPassword
+                    }
+                    onClick={() =>
+                      setPasswordUser(
+                        null
+                      )
+                    }
+                  >
+                    Cancel
+                  </button>
+
+
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={
+                      resettingPassword
+                    }
+                    onClick={
+                      handleResetPassword
+                    }
+                  >
+                    {
+                      resettingPassword
+                        ? "Resetting…"
+                        : "Reset to default password"
+                    }
+                  </button>
+
+                </div>
 
               </>
 
@@ -1744,6 +2270,7 @@ export default function Users() {
 
                   </div>
 
+
                   <button
                     className="close-x"
                     onClick={() =>
@@ -1759,20 +2286,29 @@ export default function Users() {
 
 
                 <p className="page-sub">
+
                   The password for{" "}
+
                   <strong>
-                    {resetResult.username}
+                    {
+                      resetResult.username
+                    }
                   </strong>{" "}
-                  has been changed.
+
+                  has been reset.
+
                 </p>
 
 
                 <div
                   style={{
                     padding: 16,
-                    borderRadius: 10,
+                    borderRadius:
+                      "var(--radius-lg)",
                     background:
-                      "var(--surface-2, rgba(127,127,127,.08))",
+                      "var(--surface-soft)",
+                    border:
+                      "1px solid var(--border)",
                   }}
                 >
 
@@ -1785,27 +2321,35 @@ export default function Users() {
                     New password
                   </div>
 
+
                   <strong
                     style={{
                       fontSize: 22,
+                      fontFamily:
+                        "var(--font-mono)",
                     }}
                   >
-                    {resetResult.password}
+                    {
+                      resetResult.password
+                    }
                   </strong>
 
                 </div>
 
 
-                <p className="page-sub">
-
+                <p
+                  className="page-sub"
+                  style={{
+                    marginTop: 14,
+                  }}
+                >
                   Give this password to the user.
                   They will be required to change
                   it after logging in.
-
                 </p>
 
 
-                <div className="modal-actions">
+                <div className="modal-footer">
 
                   <button
                     className="btn btn-primary"

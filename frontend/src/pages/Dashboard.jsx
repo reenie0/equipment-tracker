@@ -25,6 +25,34 @@ const DEPARTMENTS = [
 ];
 
 
+/* ==================================================
+   EQUIPMENT STATUSES
+   ================================================== */
+
+const STATUSES = [
+  {
+    value: "all",
+    label: "All statuses",
+  },
+  {
+    value: "available",
+    label: "Available",
+  },
+  {
+    value: "booked",
+    label: "Booked",
+  },
+  {
+    value: "repair",
+    label: "Repair",
+  },
+  {
+    value: "out_of_service",
+    label: "Out of service",
+  },
+];
+
+
 export default function Dashboard() {
 
   const {
@@ -43,10 +71,16 @@ export default function Dashboard() {
   const [loading, setLoading] =
     useState(true);
 
+  const [search, setSearch] =
+    useState("");
+
   const [category, setCategory] =
     useState("all");
 
   const [department, setDepartment] =
+    useState("all");
+
+  const [status, setStatus] =
     useState("all");
 
   const [bookingTarget, setBookingTarget] =
@@ -77,9 +111,7 @@ export default function Dashboard() {
 
       const {
         items,
-      } = await api.listEquipment(
-        token
-      );
+      } = await api.listEquipment(token);
 
       setItems(items || []);
 
@@ -105,8 +137,12 @@ export default function Dashboard() {
      ================================================== */
 
   useEffect(() => {
-    load();
-  }, []);
+
+    if (token) {
+      load();
+    }
+
+  }, [token]);
 
 
   /* ==================================================
@@ -159,22 +195,69 @@ export default function Dashboard() {
   const visible =
     useMemo(() => {
 
+      const term =
+        search
+          .trim()
+          .toLowerCase();
+
       return items.filter(
         (item) => {
 
+          /* ------------------------------------------
+             CATEGORY FILTER
+             ------------------------------------------ */
+
           const categoryMatches =
             category === "all" ||
-            item.category ===
-              category;
+            item.category === category;
+
+
+          /* ------------------------------------------
+             DEPARTMENT FILTER
+             ------------------------------------------ */
 
           const departmentMatches =
             department === "all" ||
-            item.department ===
-              department;
+            item.department === department;
+
+
+          /* ------------------------------------------
+             STATUS FILTER
+             ------------------------------------------ */
+
+          const statusMatches =
+            status === "all" ||
+            item.status === status;
+
+
+          /* ------------------------------------------
+             SEARCH
+             ------------------------------------------ */
+
+          const searchMatches =
+            !term ||
+            [
+              item.name,
+              item.code,
+              item.serial_number,
+              item.category,
+              item.department,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase()
+              .includes(term);
+
+
+          /* ------------------------------------------
+             FINAL RESULT
+             ------------------------------------------ */
 
           return (
             categoryMatches &&
-            departmentMatches
+            departmentMatches &&
+            statusMatches &&
+            searchMatches
           );
         }
       );
@@ -183,6 +266,8 @@ export default function Dashboard() {
       items,
       category,
       department,
+      status,
+      search,
     ]);
 
 
@@ -241,7 +326,7 @@ export default function Dashboard() {
   const handleSetStatus =
     async (
       item,
-      status
+      newStatus
     ) => {
 
       try {
@@ -252,7 +337,7 @@ export default function Dashboard() {
           await api.setEquipmentStatus(
             token,
             item.id,
-            status
+            newStatus
           );
 
         setItems(
@@ -343,7 +428,38 @@ export default function Dashboard() {
       );
 
       setAddOpen(false);
+
+      setToast({
+        type: "ok",
+        text:
+          `${item.name} was added successfully.`,
+      });
     };
+
+
+  /* ==================================================
+     CLEAR FILTERS
+     ================================================== */
+
+  const clearFilters = () => {
+
+    setSearch("");
+    setCategory("all");
+    setDepartment("all");
+    setStatus("all");
+
+  };
+
+
+  /* ==================================================
+     CHECK WHETHER FILTERS ARE ACTIVE
+     ================================================== */
+
+  const filtersActive =
+    search.trim() !== "" ||
+    category !== "all" ||
+    department !== "all" ||
+    status !== "all";
 
 
   /* ==================================================
@@ -351,9 +467,11 @@ export default function Dashboard() {
      ================================================== */
 
   return (
+
     <div className="page">
 
       <div className="container">
+
 
         {/* ==================================================
             PAGE HEADER
@@ -380,6 +498,8 @@ export default function Dashboard() {
 
           </div>
 
+
+          {/* MANAGER CONTROLS */}
 
           {isManager && (
 
@@ -419,77 +539,195 @@ export default function Dashboard() {
 
 
         {/* ==================================================
-            DEPARTMENT FILTER
+            SEARCH AND FILTERS
             ================================================== */}
 
-        <div
-          style={{
-            marginBottom: 8,
-          }}
-        >
+        <div className="user-filter-panel">
 
-          <p
-            className="eyebrow"
-            style={{
-              marginBottom: 8,
-            }}
-          >
-            Department
-          </p>
 
+          {/* FILTER HEADER */}
+
+          <div className="user-filter-header">
+
+            <div>
+
+              <p className="eyebrow">
+                Search & Filters
+              </p>
+
+              <p className="user-filter-description">
+                Find equipment by name, code,
+                serial number, department,
+                category, or status.
+              </p>
+
+            </div>
+
+          </div>
+
+
+          {/* ==================================================
+              SEARCH
+              ================================================== */}
 
           <div
-            className="tabs tabs-scroll"
+            className="form-field"
             style={{
-              borderBottom: "none",
-              marginBottom: 0,
+              marginBottom: 18,
             }}
           >
 
-            <button
-              className={
-                "tab-btn" +
-                (
-                  department === "all"
-                    ? " active"
-                    : ""
+            <label htmlFor="equipment-search">
+              Search equipment
+            </label>
+
+            <input
+              id="equipment-search"
+              type="text"
+              placeholder="Search name, code, serial number…"
+              value={search}
+              onChange={(e) =>
+                setSearch(
+                  e.target.value
                 )
               }
-              onClick={() =>
-                setDepartment(
-                  "all"
-                )
-              }
-            >
-              All departments
-            </button>
+            />
+
+          </div>
 
 
-            {DEPARTMENTS.map(
-              (dept) => (
+          {/* ==================================================
+              DROPDOWN FILTERS
+              ================================================== */}
 
-                <button
-                  key={dept}
-                  className={
-                    "tab-btn" +
-                    (
-                      department ===
-                      dept
-                        ? " active"
-                        : ""
+          <div className="user-filter-grid">
+
+
+            {/* DEPARTMENT */}
+
+            <div className="form-field">
+
+              <label htmlFor="equipment-department">
+                Department
+              </label>
+
+              <select
+                id="equipment-department"
+                value={department}
+                onChange={(e) =>
+                  setDepartment(
+                    e.target.value
+                  )
+                }
+              >
+
+                <option value="all">
+                  All departments
+                </option>
+
+                {DEPARTMENTS.map(
+                  (dept) => (
+
+                    <option
+                      key={dept}
+                      value={dept}
+                    >
+                      {dept}
+                    </option>
+
+                  )
+                )}
+
+              </select>
+
+            </div>
+
+
+            {/* CATEGORY */}
+
+            <div className="form-field">
+
+              <label htmlFor="equipment-category">
+                Category
+              </label>
+
+              <select
+                id="equipment-category"
+                value={category}
+                onChange={(e) =>
+                  setCategory(
+                    e.target.value
+                  )
+                }
+              >
+
+                <option value="all">
+                  All categories
+                </option>
+
+                {categories
+                  .filter(
+                    (item) =>
+                      item !== "all"
+                  )
+                  .map(
+                    (item) => (
+
+                      <option
+                        key={item}
+                        value={item}
+                      >
+                        {item}
+                      </option>
+
                     )
-                  }
-                  onClick={() =>
-                    setDepartment(
-                      dept
-                    )
-                  }
-                >
-                  {dept}
-                </button>
+                  )}
 
-              )
-            )}
+              </select>
+
+            </div>
+
+
+            {/* STATUS */}
+
+            <div className="form-field">
+
+              <label htmlFor="equipment-status">
+                Status
+              </label>
+
+              <select
+                id="equipment-status"
+                value={status}
+                onChange={(e) =>
+                  setStatus(
+                    e.target.value
+                  )
+                }
+              >
+
+                {STATUSES.map(
+                  (statusOption) => (
+
+                    <option
+                      key={
+                        statusOption.value
+                      }
+                      value={
+                        statusOption.value
+                      }
+                    >
+                      {
+                        statusOption.label
+                      }
+                    </option>
+
+                  )
+                )}
+
+              </select>
+
+            </div>
 
           </div>
 
@@ -497,67 +735,63 @@ export default function Dashboard() {
 
 
         {/* ==================================================
-            CATEGORY FILTER
+            FILTER SUMMARY
             ================================================== */}
 
         <div
           style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            marginTop: 16,
             marginBottom: 20,
           }}
         >
 
           <p
-            className="eyebrow"
+            className="page-sub"
             style={{
-              marginBottom: 8,
+              margin: 0,
             }}
           >
-            Category
+
+            Showing{" "}
+
+            <strong>
+              {visible.length}
+            </strong>{" "}
+
+            of{" "}
+
+            <strong>
+              {items.length}
+            </strong>{" "}
+
+            equipment items
+
           </p>
 
 
-          <div
-            className="tabs tabs-scroll"
-            style={{
-              borderBottom: "none",
-              marginBottom: 0,
-            }}
-          >
+          {filtersActive && (
 
-            {categories.map(
-              (c) => (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={
+                clearFilters
+              }
+            >
+              Clear filters
+            </button>
 
-                <button
-                  key={c}
-                  className={
-                    "tab-btn" +
-                    (
-                      category === c
-                        ? " active"
-                        : ""
-                    )
-                  }
-                  onClick={() =>
-                    setCategory(c)
-                  }
-                >
-                  {
-                    c === "all"
-                      ? "All categories"
-                      : c
-                  }
-                </button>
-
-              )
-            )}
-
-          </div>
+          )}
 
         </div>
 
 
         {/* ==================================================
-            EQUIPMENT
+            EQUIPMENT LIST
             ================================================== */}
 
         {loading ? (
@@ -569,7 +803,46 @@ export default function Dashboard() {
         ) : visible.length === 0 ? (
 
           <div className="empty-state">
-            No equipment matches these filters.
+
+            <div
+              style={{
+                fontSize: 32,
+                marginBottom: 10,
+              }}
+            >
+              🔍
+            </div>
+
+            <strong>
+              No equipment found
+            </strong>
+
+            <p
+              className="page-sub"
+              style={{
+                marginTop: 8,
+              }}
+            >
+              No equipment matches your
+              current search and filters.
+            </p>
+
+            {filtersActive && (
+
+              <button
+                className="btn btn-primary btn-sm"
+                style={{
+                  marginTop: 10,
+                }}
+                onClick={
+                  clearFilters
+                }
+              >
+                Clear filters
+              </button>
+
+            )}
+
           </div>
 
         ) : (
@@ -581,19 +854,25 @@ export default function Dashboard() {
 
                 <EquipmentCard
                   key={item.id}
+
                   item={item}
+
                   isManager={
                     isManager
                   }
+
                   onBook={
                     setBookingTarget
                   }
+
                   onDelete={
                     handleDelete
                   }
+
                   onSetStatus={
                     handleSetStatus
                   }
+
                   onEdit={
                     setEditTarget
                   }
@@ -616,6 +895,7 @@ export default function Dashboard() {
       {bookingTarget && (
 
         <BookingModal
+
           equipment={
             bookingTarget
           }
@@ -629,6 +909,7 @@ export default function Dashboard() {
           onBooked={
             handleBooked
           }
+
         />
 
       )}
@@ -641,6 +922,7 @@ export default function Dashboard() {
       {addOpen && (
 
         <AddEquipmentModal
+
           onClose={() =>
             setAddOpen(false)
           }
@@ -648,6 +930,7 @@ export default function Dashboard() {
           onAdded={
             handleAdded
           }
+
         />
 
       )}
@@ -660,6 +943,7 @@ export default function Dashboard() {
       {editTarget && (
 
         <EditEquipmentModal
+
           equipment={
             editTarget
           }
@@ -671,6 +955,7 @@ export default function Dashboard() {
           onUpdated={
             handleEquipmentUpdated
           }
+
         />
 
       )}
@@ -765,5 +1050,6 @@ export default function Dashboard() {
       )}
 
     </div>
+
   );
 }

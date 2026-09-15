@@ -32,6 +32,17 @@ const ALLOWED_DEPARTMENTS = [
 
 
 /* ==================================================
+   DEFAULT TEMPORARY PASSWORD
+
+   Used both when creating a new user and when a
+   superuser resets an existing user's password.
+   The user must change it at next login.
+   ================================================== */
+
+const DEFAULT_TEMPORARY_PASSWORD = "diamond01";
+
+
+/* ==================================================
    ROUTER SECURITY
 
    Everything in this route requires authentication
@@ -142,8 +153,8 @@ router.get("/:id", (req, res) => {
 /* ==================================================
    CREATE USER
 
-   New users receive a temporary password.
-   They must change it at first login.
+   New users receive the default temporary
+   password. They must change it at first login.
    ================================================== */
 
 router.post("/", (req, res) => {
@@ -249,18 +260,9 @@ router.post("/", (req, res) => {
     }
 
 
-    /*
-    Temporary password.
-    The user must change it at
-    first login.
-    */
-
-    const temporaryPassword =
-      "diamond01";
-
     const passwordHash =
       bcrypt.hashSync(
-        temporaryPassword,
+        DEFAULT_TEMPORARY_PASSWORD,
         10
       );
 
@@ -314,7 +316,7 @@ router.post("/", (req, res) => {
     return res.status(201).json({
       user,
       temporary_password:
-        temporaryPassword,
+        DEFAULT_TEMPORARY_PASSWORD,
     });
 
   } catch (err) {
@@ -792,30 +794,15 @@ router.patch(
    RESET USER PASSWORD
    ==================================================
 
-   Superuser chooses a new password.
-   User must change it after logging in.
+   Always resets to the fixed default temporary
+   password (DEFAULT_TEMPORARY_PASSWORD) — the
+   admin no longer types a password here. The user
+   must change it at next login.
    ================================================== */
 
 router.patch(
   "/:id/password",
   (req, res) => {
-
-    const {
-      password,
-    } = req.body;
-
-
-    if (
-      !password ||
-      password.length < 6
-    ) {
-
-      return res.status(400).json({
-        error:
-          "Password must be at least 6 characters.",
-      });
-    }
-
 
     try {
 
@@ -842,7 +829,7 @@ router.patch(
 
       const passwordHash =
         bcrypt.hashSync(
-          password,
+          DEFAULT_TEMPORARY_PASSWORD,
           10
         );
 
@@ -864,7 +851,9 @@ router.patch(
       return res.json({
         success: true,
         message:
-          "Password reset successfully.",
+          "Password reset to the default password.",
+        temporary_password:
+          DEFAULT_TEMPORARY_PASSWORD,
       });
 
     } catch (err) {

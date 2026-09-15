@@ -18,13 +18,20 @@ export default function Navbar() {
 
         {/* BRAND */}
         <div className="brand">
-          <img src="/logo.png" alt="Company logo" className="brand-logo" />
+          <img
+            src="/logo.png"
+            alt="Company logo"
+            className="brand-logo"
+          />
+
           Equipment Tracker
         </div>
+
 
         {/* NAVIGATION */}
         <nav className="nav-links">
 
+          {/* EQUIPMENT */}
           <NavLink
             to="/"
             end
@@ -36,6 +43,8 @@ export default function Navbar() {
             Equipment
           </NavLink>
 
+
+          {/* REQUESTS */}
           <NavLink
             to="/requests"
             className={({ isActive }) =>
@@ -46,18 +55,46 @@ export default function Navbar() {
             Requests
           </NavLink>
 
-          {/* MANAGER + SUPER USER */}
+
+          {/* HISTORY - ALL LOGGED-IN USERS */}
+          <NavLink
+            to="/history"
+            className={({ isActive }) =>
+              "nav-link" +
+              (isActive ? " active" : "")
+            }
+          >
+            History
+          </NavLink>
+
+
+          {/* MANAGER ONLY - REPORTS */}
           {isManager && (
             <NavLink
-              to="/manager"
+              to="/reports"
               className={({ isActive }) =>
                 "nav-link" +
                 (isActive ? " active" : "")
               }
             >
-              Manager Review
+              Reports
             </NavLink>
           )}
+
+
+          {/* MANAGER ONLY - CATEGORY MANAGEMENT */}
+          {isManager && (
+            <NavLink
+              to="/categories"
+              className={({ isActive }) =>
+                "nav-link" +
+                (isActive ? " active" : "")
+              }
+            >
+              Categories
+            </NavLink>
+          )}
+
 
           {/* SUPER USER ONLY */}
           {isSuperUser && (
@@ -74,26 +111,38 @@ export default function Navbar() {
 
         </nav>
 
+
         {/* USER */}
         <div className="nav-user">
 
+          {/* THEME TOGGLE */}
           <button
             className="theme-toggle"
             onClick={toggleTheme}
             aria-label="Toggle light/dark theme"
-            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+            title={
+              theme === "light"
+                ? "Switch to dark mode"
+                : "Switch to light mode"
+            }
           >
             {theme === "light" ? "🌙" : "☀️"}
           </button>
 
+
+          {/* USER NAME */}
           <span>
             {user?.name}
           </span>
 
+
+          {/* ROLE */}
           <span className="role-chip">
             {user?.role}
           </span>
 
+
+          {/* SIGN OUT */}
           <button
             className="btn btn-ghost btn-sm"
             onClick={logout}
