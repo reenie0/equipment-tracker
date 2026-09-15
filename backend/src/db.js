@@ -29,9 +29,6 @@ DEPARTMENT DEFINITIONS
 ----------------------------------------------------
 USER DEPARTMENTS
 ----------------------------------------------------
-
-These are the ONLY departments users can have.
-----------------------------------------------------
 */
 
 const USER_DEPARTMENTS = [
@@ -54,15 +51,56 @@ const USER_DEPARTMENTS = [
 ----------------------------------------------------
 EQUIPMENT DEPARTMENTS
 ----------------------------------------------------
-
-Equipment intentionally uses a separate list.
-----------------------------------------------------
 */
 
 const EQUIPMENT_DEPARTMENTS = [
   "Post Production",
   "IT",
   "Social Media"
+];
+
+
+/*
+====================================================
+CATEGORY MANAGEMENT
+====================================================
+*/
+
+/*
+----------------------------------------------------
+DEFAULT CATEGORIES
+----------------------------------------------------
+*/
+
+const DEFAULT_CATEGORIES = [
+  "Audio",
+  "Batteries",
+  "Cables",
+  "Camera Support",
+  "Cameras",
+  "Chargers",
+  "Communication",
+  "Displays",
+  "Lighting",
+  "Microphones",
+  "Monitoring",
+  "Podcast Equipment",
+  "Recorders",
+  "Stands",
+  "Tablets",
+  "Transmission Equipment",
+  "Video Equipment",
+  "Wireless Systems",
+  "Laptops",
+  "Phones",
+  "Desktop Computers",
+  "Monitors",
+  "Printers",
+  "Servers",
+  "Networking Equipment",
+  "Storage Devices",
+  "Accessories",
+  "Other"
 ];
 
 
@@ -277,12 +315,6 @@ else {
         "must_change_password"
     );
 
-  /*
-  --------------------------------------------------
-  CHECK WHETHER THE CURRENT TABLE ALREADY USES
-  THE NEW DEPARTMENT LIST
-  --------------------------------------------------
-  */
 
   const needsDepartmentMigration =
     !usersSql.includes("'Newsroom'") ||
@@ -338,17 +370,7 @@ else {
 
   /*
   ==================================================
-  SPLIT name INTO first_name / last_name
-  ==================================================
-
-  Older databases store a single "name" column.
-  We add first_name/last_name (each NOT NULL with
-  a temporary '' default, which SQLite allows even
-  on a populated table), backfill them by splitting
-  the old name on the first space, then drop the
-  old column. SQLite 3.35+ (bundled by better-sqlite3)
-  supports DROP COLUMN directly, so no full table
-  rebuild is needed for this one.
+  SPLIT NAME INTO FIRST AND LAST NAME
   ==================================================
   */
 
@@ -366,6 +388,7 @@ else {
     usersColumns.some(
       column => column.name === "last_name"
     );
+
 
   if (!hasFirstName) {
 
@@ -385,6 +408,7 @@ else {
     );
   }
 
+
   if (!hasLastName) {
 
     console.log(
@@ -402,6 +426,7 @@ else {
       "✅ users.last_name added."
     );
   }
+
 
   if (
     hasOldNameColumn &&
@@ -456,6 +481,7 @@ else {
     );
   }
 
+
   if (hasOldNameColumn) {
 
     console.log(
@@ -475,8 +501,7 @@ else {
 
   /*
   ==================================================
-  REBUILD USERS TABLE IF THE DEPARTMENT CHECK
-  IS OLD OR MISSING
+  REBUILD USERS TABLE IF DEPARTMENT CHECK IS OLD
   ==================================================
   */
 
@@ -489,21 +514,10 @@ else {
       "🔄 Migrating users table to the new 12-department structure..."
     );
 
-    /*
-    ------------------------------------------------
-    FOREIGN KEYS OFF
-    ------------------------------------------------
-    */
-
     db.pragma(
       "foreign_keys = OFF"
     );
 
-    /*
-    ------------------------------------------------
-    CREATE NEW USERS TABLE
-    ------------------------------------------------
-    */
 
     db.exec(`
       CREATE TABLE users_new (
@@ -566,16 +580,6 @@ else {
     `);
 
 
-    /*
-    ------------------------------------------------
-    COPY EXISTING USERS
-    ------------------------------------------------
-
-    Old departments are translated to the new
-    department names.
-    ------------------------------------------------
-    */
-
     const existingColumns =
       getColumns("users");
 
@@ -599,12 +603,6 @@ else {
           "department"
       );
 
-
-    /*
-    ------------------------------------------------
-    DEPARTMENT MIGRATION
-    ------------------------------------------------
-    */
 
     let departmentExpression;
 
@@ -651,12 +649,6 @@ else {
     }
 
 
-    /*
-    ------------------------------------------------
-    ROLE MIGRATION
-    ------------------------------------------------
-    */
-
     let roleExpression;
 
     if (hasRoleColumn) {
@@ -686,35 +678,17 @@ else {
     }
 
 
-    /*
-    ------------------------------------------------
-    ACTIVE
-    ------------------------------------------------
-    */
-
     const activeExpression =
       oldHasActive
         ? `COALESCE(active, 1)`
         : `1`;
 
 
-    /*
-    ------------------------------------------------
-    MUST CHANGE PASSWORD
-    ------------------------------------------------
-    */
-
     const mustChangeExpression =
       oldHasMustChange
         ? `COALESCE(must_change_password, 0)`
         : `0`;
 
-
-    /*
-    ------------------------------------------------
-    COPY USERS
-    ------------------------------------------------
-    */
 
     db.exec(`
       INSERT INTO users_new (
@@ -770,34 +744,16 @@ else {
     `);
 
 
-    /*
-    ------------------------------------------------
-    DROP OLD USERS TABLE
-    ------------------------------------------------
-    */
-
     db.exec(`
       DROP TABLE users;
     `);
 
-
-    /*
-    ------------------------------------------------
-    RENAME NEW TABLE
-    ------------------------------------------------
-    */
 
     db.exec(`
       ALTER TABLE users_new
       RENAME TO users;
     `);
 
-
-    /*
-    ------------------------------------------------
-    FOREIGN KEYS BACK ON
-    ------------------------------------------------
-    */
 
     db.pragma(
       "foreign_keys = ON"
@@ -1006,15 +962,7 @@ if (!tableExists("equipment")) {
 
   /*
   --------------------------------------------------
-  ADD 'out_of_service' TO STATUS CHECK
-  --------------------------------------------------
-
-  This modifies an existing CHECK constraint, which
-  SQLite can only do by rebuilding the table. The
-  whole rebuild runs inside a single transaction so
-  a failure partway through can never leave a stray
-  equipment_new table behind — the same class of bug
-  that previously got bookings_new stuck permanently.
+  ADD OUT OF SERVICE STATUS
   --------------------------------------------------
   */
 
@@ -1034,7 +982,9 @@ if (!tableExists("equipment")) {
 
     db.pragma("foreign_keys = OFF");
 
-    db.exec(`DROP TABLE IF EXISTS equipment_new;`);
+    db.exec(
+      `DROP TABLE IF EXISTS equipment_new;`
+    );
 
     const migrateEquipment =
       db.transaction(() => {
@@ -1085,12 +1035,28 @@ if (!tableExists("equipment")) {
           );
 
           INSERT INTO equipment_new (
-            id, code, name, category, department,
-            serial_number, status, notes, created_at
+            id,
+            code,
+            name,
+            category,
+            department,
+            serial_number,
+            status,
+            notes,
+            created_at
           )
+
           SELECT
-            id, code, name, category, department,
-            serial_number, status, notes, created_at
+            id,
+            code,
+            name,
+            category,
+            department,
+            serial_number,
+            status,
+            notes,
+            created_at
+
           FROM equipment;
 
           DROP TABLE equipment;
@@ -1109,6 +1075,224 @@ if (!tableExists("equipment")) {
     );
   }
 }
+
+
+/*
+====================================================
+CATEGORY TABLE
+====================================================
+*/
+
+/*
+----------------------------------------------------
+CREATE CATEGORIES TABLE
+----------------------------------------------------
+*/
+
+if (!tableExists("categories")) {
+
+  console.log(
+    "🔄 Creating categories table..."
+  );
+
+  db.exec(`
+    CREATE TABLE categories (
+
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+      name TEXT NOT NULL
+        COLLATE NOCASE
+        UNIQUE,
+
+      created_at TEXT NOT NULL
+        DEFAULT (datetime('now'))
+    );
+  `);
+
+  console.log(
+    "✅ Categories table created."
+  );
+}
+
+
+/*
+----------------------------------------------------
+NORMALISE EXISTING EQUIPMENT CATEGORIES
+----------------------------------------------------
+*/
+
+/*
+ * This only standardises common existing category names.
+ * It does not delete equipment or change any other
+ * equipment information.
+ */
+
+const categoryNormalisations = [
+
+  {
+    oldNames: [
+      "laptop",
+      "laptops"
+    ],
+    newName: "Laptops"
+  },
+
+  {
+    oldNames: [
+      "phone",
+      "phones"
+    ],
+    newName: "Phones"
+  },
+
+  {
+    oldNames: [
+      "tablet",
+      "tablets"
+    ],
+    newName: "Tablets"
+  },
+
+  {
+    oldNames: [
+      "camera",
+      "cameras"
+    ],
+    newName: "Cameras"
+  },
+
+  {
+    oldNames: [
+      "microphone",
+      "microphones"
+    ],
+    newName: "Microphones"
+  },
+
+  {
+    oldNames: [
+      "printer",
+      "printers"
+    ],
+    newName: "Printers"
+  },
+
+  {
+    oldNames: [
+      "monitor",
+      "monitors"
+    ],
+    newName: "Monitors"
+  }
+
+];
+
+
+for (
+  const mapping
+  of categoryNormalisations
+) {
+
+  const placeholders =
+    mapping.oldNames
+      .map(() => "?")
+      .join(", ");
+
+  const values =
+    mapping.oldNames.map(
+      name => name.toLowerCase()
+    );
+
+  db.prepare(`
+    UPDATE equipment
+
+    SET category = ?
+
+    WHERE LOWER(TRIM(category))
+      IN (${placeholders})
+  `).run(
+    mapping.newName,
+    ...values
+  );
+}
+
+
+/*
+----------------------------------------------------
+SEED DEFAULT CATEGORIES
+----------------------------------------------------
+*/
+
+const insertCategory =
+  db.prepare(`
+    INSERT OR IGNORE INTO categories (
+      name
+    )
+
+    VALUES (?)
+  `);
+
+
+/*
+ * Add the standard categories.
+ */
+
+for (
+  const category
+  of DEFAULT_CATEGORIES
+) {
+
+  insertCategory.run(
+    category
+  );
+}
+
+
+/*
+ * Also add every category currently being used
+ * by existing equipment.
+ *
+ * This makes sure existing/custom categories
+ * are not lost.
+ */
+
+const existingEquipmentCategories =
+  db.prepare(`
+    SELECT DISTINCT
+      TRIM(category) AS category
+
+    FROM equipment
+
+    WHERE category IS NOT NULL
+
+      AND TRIM(category) != ''
+  `)
+  .all();
+
+
+for (
+  const row
+  of existingEquipmentCategories
+) {
+
+  insertCategory.run(
+    row.category
+  );
+}
+
+
+/*
+----------------------------------------------------
+CATEGORY INDEX
+----------------------------------------------------
+*/
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS
+  idx_categories_name
+  ON categories(name);
+`);
+
 
 /*
 ====================================================
@@ -1171,6 +1355,7 @@ if (!tableExists("bookings")) {
       manager_note TEXT,
 
       return_status TEXT
+
         CHECK (
           return_status IN (
             'available',
@@ -1181,7 +1366,19 @@ if (!tableExists("bookings")) {
 
       return_note TEXT,
 
-      returned_at TEXT
+      returned_at TEXT,
+
+      decided_by INTEGER
+
+        REFERENCES users(id)
+
+        ON DELETE SET NULL,
+
+      returned_by INTEGER
+
+        REFERENCES users(id)
+
+        ON DELETE SET NULL
     );
   `);
 
@@ -1196,24 +1393,6 @@ if (!tableExists("bookings")) {
 ====================================================
 MIGRATE EXISTING BOOKINGS TABLE
 ====================================================
-
-The return_status / return_note / returned_at
-columns above only get created for a brand new
-database. Your bookings table already exists, so
-without this branch it would never get them.
-
-return_status has no CHECK constraint at the ALTER
-TABLE level — validation happens in bookings.js
-instead. That means adding another allowed status
-later never requires rebuilding this table.
-
-NOTE: requester_name is left as-is (a plain text
-snapshot of the requester's full name at booking
-time). Wherever bookings.js builds this string from
-req.user.name, update it to
-`${req.user.first_name} ${req.user.last_name}` —
-see the note at the bottom of this migration file.
-====================================================
 */
 
 else {
@@ -1221,20 +1400,47 @@ else {
   const bookingsColumns =
     getColumns("bookings");
 
+
   const hasReturnStatus =
     bookingsColumns.some(
-      column => column.name === "return_status"
+      column =>
+        column.name === "return_status"
     );
+
 
   const hasReturnNote =
     bookingsColumns.some(
-      column => column.name === "return_note"
+      column =>
+        column.name === "return_note"
     );
+
 
   const hasReturnedAt =
     bookingsColumns.some(
-      column => column.name === "returned_at"
+      column =>
+        column.name === "returned_at"
     );
+
+
+  const hasDecidedBy =
+    bookingsColumns.some(
+      column =>
+        column.name === "decided_by"
+    );
+
+
+  const hasReturnedBy =
+    bookingsColumns.some(
+      column =>
+        column.name === "returned_by"
+    );
+
+
+  /*
+  --------------------------------------------------
+  ADD RETURN STATUS
+  --------------------------------------------------
+  */
 
   if (!hasReturnStatus) {
 
@@ -1252,6 +1458,13 @@ else {
     );
   }
 
+
+  /*
+  --------------------------------------------------
+  ADD RETURN NOTE
+  --------------------------------------------------
+  */
+
   if (!hasReturnNote) {
 
     console.log(
@@ -1268,6 +1481,13 @@ else {
     );
   }
 
+
+  /*
+  --------------------------------------------------
+  ADD RETURNED AT
+  --------------------------------------------------
+  */
+
   if (!hasReturnedAt) {
 
     console.log(
@@ -1281,6 +1501,52 @@ else {
 
     console.log(
       "✅ bookings.returned_at added."
+    );
+  }
+
+
+  /*
+  --------------------------------------------------
+  ADD DECIDED BY
+  --------------------------------------------------
+  */
+
+  if (!hasDecidedBy) {
+
+    console.log(
+      "🔄 Adding bookings.decided_by..."
+    );
+
+    db.exec(`
+      ALTER TABLE bookings
+      ADD COLUMN decided_by INTEGER
+    `);
+
+    console.log(
+      "✅ bookings.decided_by added."
+    );
+  }
+
+
+  /*
+  --------------------------------------------------
+  ADD RETURNED BY
+  --------------------------------------------------
+  */
+
+  if (!hasReturnedBy) {
+
+    console.log(
+      "🔄 Adding bookings.returned_by..."
+    );
+
+    db.exec(`
+      ALTER TABLE bookings
+      ADD COLUMN returned_by INTEGER
+    `);
+
+    console.log(
+      "✅ bookings.returned_by added."
     );
   }
 }
@@ -1324,6 +1590,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS
   idx_bookings_status
   ON bookings(status);
+
+  CREATE INDEX IF NOT EXISTS
+  idx_bookings_decided_by
+  ON bookings(decided_by);
+
+  CREATE INDEX IF NOT EXISTS
+  idx_bookings_returned_by
+  ON bookings(returned_by);
 `);
 
 
@@ -1559,6 +1833,7 @@ const postProductionEquipment = [
 
 ];
 
+
 /*
 ====================================================
 IT EQUIPMENT
@@ -1566,12 +1841,6 @@ IT EQUIPMENT
 */
 
 const itEquipment = [
-
-  /*
-  --------------------------------------------------
-  TABLETS
-  --------------------------------------------------
-  */
 
   [
     "IT-001",
@@ -1588,13 +1857,6 @@ const itEquipment = [
     "R5GYB3EN1FB",
     null
   ],
-
-
-  /*
-  --------------------------------------------------
-  LAPTOPS
-  --------------------------------------------------
-  */
 
   [
     "IT-003",
@@ -1628,12 +1890,6 @@ const itEquipment = [
     null
   ],
 
-
-  /*
-  --------------------------------------------------
-  PHONES
-  --------------------------------------------------
-  */
 
   ["IT-007", "Samsung Phone", "Phones", "R5GL11JVOZA", "Color: Peach Pink"],
   ["IT-008", "Samsung Phone", "Phones", "R5GL15B7GDW", "Color: Peach Pink"],
@@ -1780,9 +2036,6 @@ const itEquipment = [
 ];
 
 
-
-
-
 /*
 ====================================================
 INSERT POST PRODUCTION EQUIPMENT
@@ -1905,6 +2158,15 @@ const totalBookings =
     .get().count;
 
 
+const totalCategories =
+  db
+    .prepare(`
+      SELECT COUNT(*) AS count
+      FROM categories
+    `)
+    .get().count;
+
+
 console.log("");
 
 console.log(
@@ -1929,6 +2191,10 @@ console.log(
 
 console.log(
   ` Bookings:   ${totalBookings}`
+);
+
+console.log(
+  ` Categories: ${totalCategories}`
 );
 
 console.log(
